@@ -24,16 +24,32 @@ const Auth = () => {
       return;
     }
     setBusy(true);
-    const { error } =
-      mode === "in"
-        ? await signIn(email, password)
-        : await signUp(email, password, firstName);
-    setBusy(false);
-    if (error) {
-      toast.error(error);
+    if (mode === "in") {
+      const { error } = await signIn(email, password);
+      setBusy(false);
+      if (error) {
+        toast.error(error);
+      } else {
+        toast.success("ברוך שובך");
+        nav("/");
+      }
     } else {
-      toast.success(mode === "in" ? "ברוך שובך" : "החשבון נוצר");
-      nav("/");
+      const { error } = await signUp(email, password, firstName);
+      if (error) {
+        setBusy(false);
+        toast.error(error);
+        return;
+      }
+      // Auto sign-in after signup
+      const { error: signInErr } = await signIn(email, password);
+      setBusy(false);
+      if (signInErr) {
+        toast.success("החשבון נוצר. אנא התחבר/י");
+        setMode("in");
+      } else {
+        toast.success("החשבון נוצר");
+        nav("/");
+      }
     }
   };
 
