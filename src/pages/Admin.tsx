@@ -158,8 +158,7 @@ const Admin = () => {
           </div>
         </div>
 
-        <RunsLogCard title="לוג ריצות — News" runs={newsRuns} />
-        <RunsLogCard title="לוג ריצות — Research" runs={researchRuns} />
+        <LogsMonitoringSection newsRuns={newsRuns} researchRuns={researchRuns} />
       </div>
     </AppLayout>
   );
