@@ -304,6 +304,7 @@ Deno.serve(async (req) => {
       .select("id,name,rss_url,region,type")
       .eq("active", true)
       .eq("is_seed", false)
+      .neq("status", "archived")
       .not("rss_url", "is", null);
     if (sourceId) q = q.eq("id", sourceId);
     const { data: sources, error } = await q;

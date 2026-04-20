@@ -9,6 +9,7 @@ import { useSources, useItems } from "@/hooks/useIntelligence";
 import { toast } from "sonner";
 import { formatHeRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { SourceManager } from "@/components/SourceManager";
 
 interface IngestionRun {
   id: string;
@@ -123,32 +124,20 @@ const Admin = () => {
         </div>
 
         <div className="surface-card p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <h2 className="text-lg font-bold text-primary">הרצת ingestion ידנית</h2>
-              <p className="text-sm text-muted-foreground">משוך תוכן עכשיו ממקורות RSS אמיתיים. עד 10 פריטים לכל מקור.</p>
+              <h2 className="text-lg font-bold text-primary">הרצת News ידנית</h2>
+              <p className="text-sm text-muted-foreground">
+                משוך תוכן עכשיו מכל המקורות ה-runnable. עד 10 פריטים למקור.
+              </p>
             </div>
             <Button onClick={() => runIngestion()} disabled={running || realSources.length === 0}>
               {running ? "רץ..." : "הרץ את כל המקורות"}
             </Button>
           </div>
-          <div className="space-y-2">
-            {realSources.length === 0 && (
-              <div className="text-sm text-muted-foreground">אין מקורות פעילים עם RSS</div>
-            )}
-            {realSources.map((s: any) => (
-              <div key={s.id} className="flex items-center justify-between p-3 rounded-md border border-border bg-background/50">
-                <div>
-                  <div className="font-medium text-sm">{s.name}</div>
-                  <div className="text-xs text-muted-foreground" dir="ltr">{s.rss_url}</div>
-                </div>
-                <Button size="sm" variant="outline" onClick={() => runIngestion(s.id)} disabled={running}>
-                  הרץ
-                </Button>
-              </div>
-            ))}
-          </div>
         </div>
+
+        <SourceManager onRunSource={(id) => runIngestion(id)} />
 
         <div className="surface-card p-6">
           <div className="flex items-center justify-between mb-2">
