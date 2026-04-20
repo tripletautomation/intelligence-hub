@@ -44,7 +44,10 @@ async function firecrawlScrape(url: string): Promise<string> {
       url,
       formats: ["markdown"],
       onlyMainContent: true,
-      waitFor: 5000,
+      waitFor: 8000,
+      timeout: 60000,
+      proxy: "stealth",
+      blockAds: true,
     }),
   });
   const data = await res.json();
@@ -53,6 +56,9 @@ async function firecrawlScrape(url: string): Promise<string> {
   }
   const md: string | undefined = data?.data?.markdown ?? data?.markdown;
   if (!md) throw new Error("Firecrawl returned no markdown");
+  if (md.length < 500) {
+    throw new Error(`Firecrawl returned suspiciously short markdown (${md.length} chars) — likely blocked or not rendered`);
+  }
   return md;
 }
 
