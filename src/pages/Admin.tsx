@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useSources, useItems } from "@/hooks/useIntelligence";
 import { toast } from "sonner";
-import { formatRelative } from "@/lib/format";
+import { formatHeRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 interface IngestionRun {
