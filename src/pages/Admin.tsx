@@ -29,11 +29,13 @@ const Admin = () => {
   const { data: sources = [] } = useSources();
   const { data: items = [] } = useItems();
   const [running, setRunning] = useState(false);
+  const [runningResearch, setRunningResearch] = useState(false);
   const [hideSeed, setHideSeed] = useState(() => localStorage.getItem("hideSeed") === "1");
 
   const realSources = sources.filter((s: any) => !s.is_seed && s.rss_url);
   const seedItemsCount = items.filter((i: any) => i.is_seed).length;
   const realItemsCount = items.length - seedItemsCount;
+  const researchItemsCount = items.filter((i: any) => i.item_type === "research").length;
 
   const { data: runs = [], refetch: refetchRuns } = useQuery({
     queryKey: ["ingestion_runs"],
@@ -42,11 +44,14 @@ const Admin = () => {
         .from("ingestion_runs")
         .select("*")
         .order("started_at", { ascending: false })
-        .limit(20);
+        .limit(40);
       if (error) throw error;
       return data ?? [];
     },
   });
+
+  const newsRuns = runs.filter((r) => r.triggered_by !== "manual-research").slice(0, 20);
+  const researchRuns = runs.filter((r) => r.triggered_by === "manual-research").slice(0, 20);
 
   const runIngestion = async (sourceId?: string) => {
     setRunning(true);
@@ -66,6 +71,24 @@ const Admin = () => {
     }
   };
 
+  const runResearchIngestion = async () => {
+    setRunningResearch(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("ingest-research", {
+        body: { max_items: 15 },
+      });
+      if (error) throw error;
+      const ins = (data as any)?.inserted ?? 0;
+      const fet = (data as any)?.fetched ?? 0;
+      toast.success(`Research — נמשכו ${fet}, נוספו ${ins} פריטי מחקר`);
+      await Promise.all([refetchRuns(), qc.invalidateQueries({ queryKey: ["items"] })]);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה בריצת Research");
+    } finally {
+      setRunningResearch(false);
+    }
+  };
+
   const toggleHideSeed = (v: boolean) => {
     setHideSeed(v);
     localStorage.setItem("hideSeed", v ? "1" : "0");
@@ -78,8 +101,9 @@ const Admin = () => {
         <div className="surface-card p-6">
           <h2 className="text-lg font-bold text-primary mb-1">מצב נתונים</h2>
           <p className="text-sm text-muted-foreground mb-4">סקירה של seed מול תוכן אמיתי שהוטמע</p>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Stat label="פריטים אמיתיים" value={realItemsCount} accent />
+            <Stat label="פריטי Research" value={researchItemsCount} />
             <Stat label="פריטי seed (דמו)" value={seedItemsCount} />
             <Stat label="מקורות פעילים עם RSS" value={realSources.length} />
           </div>
@@ -120,51 +144,73 @@ const Admin = () => {
         </div>
 
         <div className="surface-card p-6">
-          <h2 className="text-lg font-bold text-primary mb-4">לוג ריצות אחרונות</h2>
-          {runs.length === 0 ? (
-            <div className="text-sm text-muted-foreground">אין ריצות עדיין</div>
-          ) : (
-            <div className="space-y-2">
-              {runs.map((r) => (
-                <div key={r.id} className="p-3 rounded-md border border-border bg-background/50">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <StatusDot status={r.status} />
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium truncate">{r.source_name ?? "—"}</div>
-                        <div className="text-xs text-muted-foreground">{formatHeRelative(r.started_at)}</div>
-                      </div>
-                    </div>
-                    <div className="text-xs text-muted-foreground flex gap-4 shrink-0">
-                      <span>נמשכו: <b className="text-foreground">{r.fetched}</b></span>
-                      <span>חדשים: <b className="text-foreground">{r.inserted}</b></span>
-                      <span>דילוגים: <b className="text-foreground">{r.skipped}</b></span>
-                      <span className={cn(r.errors_json && "text-destructive")}>
-                        שגיאות: <b>{r.errors_json?.length ?? 0}</b>
-                      </span>
-                    </div>
-                  </div>
-                  {r.errors_json && r.errors_json.length > 0 && (
-                    <details className="mt-2">
-                      <summary className="text-xs text-muted-foreground cursor-pointer">הצג שגיאות</summary>
-                      <ul className="mt-2 space-y-1 text-xs">
-                        {r.errors_json.slice(0, 5).map((e, i) => (
-                          <li key={i} className="text-destructive" dir="ltr">
-                            [{e.stage}] {e.message}{e.url ? ` — ${e.url}` : ""}
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
-                </div>
-              ))}
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h2 className="text-lg font-bold text-primary">הרצת Research ידנית</h2>
+              <p className="text-sm text-muted-foreground">
+                שואב מ-DCD RSS ומסנן דרך AI — נשמרים רק whitepapers / reports / studies / analyses כ-<code className="text-xs">item_type=research</code>.
+              </p>
             </div>
-          )}
+            <Button onClick={runResearchIngestion} disabled={runningResearch} variant="secondary">
+              {runningResearch ? "רץ..." : "הרץ Research"}
+            </Button>
+          </div>
+          <div className="text-xs text-muted-foreground mt-2" dir="ltr">
+            Source: DCD main RSS · Filter: AI strict (is_research=true only) · Manual only
+          </div>
         </div>
+
+        <RunsLogCard title="לוג ריצות — News" runs={newsRuns} />
+        <RunsLogCard title="לוג ריצות — Research" runs={researchRuns} />
       </div>
     </AppLayout>
   );
 };
+
+const RunsLogCard = ({ title, runs }: { title: string; runs: IngestionRun[] }) => (
+  <div className="surface-card p-6">
+    <h2 className="text-lg font-bold text-primary mb-4">{title}</h2>
+    {runs.length === 0 ? (
+      <div className="text-sm text-muted-foreground">אין ריצות עדיין</div>
+    ) : (
+      <div className="space-y-2">
+        {runs.map((r) => (
+          <div key={r.id} className="p-3 rounded-md border border-border bg-background/50">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <StatusDot status={r.status} />
+                <div className="min-w-0">
+                  <div className="text-sm font-medium truncate">{r.source_name ?? "—"}</div>
+                  <div className="text-xs text-muted-foreground">{formatHeRelative(r.started_at)}</div>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground flex gap-4 shrink-0">
+                <span>נמשכו: <b className="text-foreground">{r.fetched}</b></span>
+                <span>חדשים: <b className="text-foreground">{r.inserted}</b></span>
+                <span>דילוגים: <b className="text-foreground">{r.skipped}</b></span>
+                <span className={cn(r.errors_json && "text-destructive")}>
+                  שגיאות: <b>{r.errors_json?.length ?? 0}</b>
+                </span>
+              </div>
+            </div>
+            {r.errors_json && r.errors_json.length > 0 && (
+              <details className="mt-2">
+                <summary className="text-xs text-muted-foreground cursor-pointer">הצג שגיאות</summary>
+                <ul className="mt-2 space-y-1 text-xs">
+                  {r.errors_json.slice(0, 5).map((e, i) => (
+                    <li key={i} className="text-destructive" dir="ltr">
+                      [{e.stage}] {e.message}{e.url ? ` — ${e.url}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+);
 
 const Stat = ({ label, value, accent }: { label: string; value: number; accent?: boolean }) => (
   <div className="rounded-md border border-border p-4 bg-background/50">
