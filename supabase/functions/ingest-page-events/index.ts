@@ -33,33 +33,70 @@ interface ExtractedEvent {
   title_he: string;
 }
 
-async function firecrawlScrape(url: string): Promise<string> {
-  const res = await fetch("https://api.firecrawl.dev/v2/scrape", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      url,
-      formats: ["markdown"],
-      onlyMainContent: true,
-      waitFor: 8000,
-      timeout: 60000,
-      proxy: "stealth",
-      blockAds: true,
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(`Firecrawl ${res.status}: ${(data?.error ?? JSON.stringify(data)).toString().slice(0, 300)}`);
+async function firecrawlScrape(url: string): Promise<{ markdown: string; resolvedUrl: string }> {
+  const candidates = [url];
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes("datacenterdynamics.com")) {
+      candidates.push(
+        "https://www.datacenterdynamics.com/en/conferences/",
+        "https://www.datacenterdynamics.com/en/broadcasts/upcoming/",
+      );
+    }
+  } catch {
+    // ignore invalid source URL and let the original request fail below
   }
-  const md: string | undefined = data?.data?.markdown ?? data?.markdown;
-  if (!md) throw new Error("Firecrawl returned no markdown");
-  if (md.length < 500) {
-    throw new Error(`Firecrawl returned suspiciously short markdown (${md.length} chars) — likely blocked or not rendered`);
+
+  const seen = new Set<string>();
+  const attempts: string[] = [];
+
+  for (const candidate of candidates) {
+    if (!candidate || seen.has(candidate)) continue;
+    seen.add(candidate);
+
+    const res = await fetch("https://api.firecrawl.dev/v2/scrape", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url: candidate,
+        formats: ["markdown"],
+        onlyMainContent: true,
+        waitFor: 8000,
+        timeout: 60000,
+        proxy: "stealth",
+        blockAds: true,
+      }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      attempts.push(`${candidate} -> http ${res.status}`);
+      continue;
+    }
+
+    const md: string | undefined = data?.data?.markdown ?? data?.markdown;
+    if (!md) {
+      attempts.push(`${candidate} -> no markdown`);
+      continue;
+    }
+
+    const normalized = md.replace(/\s+/g, " ").trim().toLowerCase();
+    if (normalized.includes("sorry, we couldn't find this page")) {
+      attempts.push(`${candidate} -> 404 page`);
+      continue;
+    }
+    if (md.length < 500) {
+      attempts.push(`${candidate} -> short markdown (${md.length} chars)`);
+      continue;
+    }
+
+    return { markdown: md, resolvedUrl: candidate };
   }
-  return md;
+
+  throw new Error(`Firecrawl failed for all candidates: ${attempts.join(" | ").slice(0, 500)}`);
 }
 
 async function extractEvents(
@@ -69,12 +106,13 @@ async function extractEvents(
 ): Promise<ExtractedEvent[]> {
   debug.mdLen = markdown.length;
   const sys =
-    "You extract structured event records from a scraped events page (markdown). " +
-    "Return ONLY events that are clearly listed as upcoming or recent events. Skip navigation, footers, generic links. " +
+    "You extract structured event records from a scraped events listing page (markdown). " +
+    "The page may be a conferences, broadcasts, or upcoming events index rather than a URL literally named events. " +
+    "Return ONLY concrete upcoming or recent event records that a user could attend or watch. Skip navigation, cookie banners, ads, footers, news articles, and generic marketing copy. " +
     "Translate title and summary to Hebrew. Provide a 1-sentence Hebrew 'why it matters' for an Israeli data-center professional. " +
     "If event_date is unknown or ambiguous, set it to null. Use ISO 8601 with timezone if possible. " +
     "Resolve relative URLs against the page URL.";
-  const user = `Page URL: ${pageUrl}\n\nPage markdown (truncated):\n${markdown.slice(0, 18000)}`;
+  const user = `Page URL: ${pageUrl}\n\nPage markdown (truncated):\n${markdown.slice(0, 30000)}`;
 
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -175,14 +213,14 @@ async function ingestPageSource(source: {
   let fetched = 0, inserted = 0, skipped = 0;
 
   try {
-    const md = await firecrawlScrape(source.url);
+    const { markdown: md, resolvedUrl } = await firecrawlScrape(source.url);
     const debug: { raw?: string; mdLen?: number; finishReason?: string; rawArgs?: string } = {};
-    const events = await extractEvents(source.url, md, debug);
+    const events = await extractEvents(resolvedUrl, md, debug);
     fetched = events.length;
     if (events.length === 0) {
       errors.push({
         stage: "ai-empty",
-        url: source.url,
+        url: resolvedUrl,
         message: `No events extracted. md_len=${debug.mdLen} finish=${debug.finishReason} raw=${debug.raw ?? ""} args=${debug.rawArgs ?? ""}`,
       });
     }
