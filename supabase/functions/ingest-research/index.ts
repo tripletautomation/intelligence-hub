@@ -83,10 +83,10 @@ function parseRss(xml: string): ParsedEntry[] {
 
 async function classifyAndEnrich(entry: ParsedEntry): Promise<ResearchEnriched | null> {
   const sys =
-    "You are a strict research classifier for an Israeli data-center intelligence platform. " +
-    "Mark is_research=TRUE ONLY for substantive research content: whitepapers, industry reports, market studies, surveys, in-depth multi-page analyses, or research-backed forecasts. " +
-    "Mark is_research=FALSE for: news articles, product launches, company announcements, opinion pieces, short blog posts, event coverage, interviews. " +
-    "Be strict — when in doubt, mark FALSE. " +
+    "You are a research classifier for an Israeli data-center intelligence platform. " +
+    "Mark is_research=TRUE for substantive research-style content, including: whitepapers, industry reports, market studies, surveys, in-depth multi-page analyses, research-backed forecasts, market outlooks, sector insights, special reports, market-trends pieces, and analyst briefings. " +
+    "Mark is_research=FALSE for: short news updates, product launches, company announcements, opinion/op-eds, single-quote interviews, event coverage, listicles, sponsored posts. " +
+    "If the piece presents data, multi-source analysis, forecasts, or structured market trends — lean TRUE. If it is a single news event or PR — FALSE. " +
     "If is_research=TRUE, also produce a Hebrew translation, summary, why-it-matters, region, tags, and relevance score (0-100) for Israeli data-center professionals.";
   const user = `Article:
 Title: ${entry.title}
@@ -114,8 +114,8 @@ URL: ${entry.link}`;
             parameters: {
               type: "object",
               properties: {
-                is_research: { type: "boolean", description: "TRUE only for whitepapers/reports/studies/in-depth analyses. Strict." },
-                research_type: { type: "string", enum: ["whitepaper", "report", "study", "analysis", "survey", "other"] },
+                is_research: { type: "boolean", description: "TRUE for whitepapers/reports/studies/analyses/outlooks/insights/special reports/market trends." },
+                research_type: { type: "string", enum: ["whitepaper", "report", "study", "analysis", "outlook", "insight", "special_report", "market_trends", "survey", "other"] },
                 title_he: { type: "string" },
                 summary_he: { type: "string", description: "Hebrew, max 2 sentences" },
                 why_it_matters: { type: "string", description: "Hebrew, 1 sentence, Israeli data-center perspective" },
@@ -204,8 +204,15 @@ Deno.serve(async (req) => {
     const runId = runRow.id;
 
     const errors: { stage: string; url?: string; message: string }[] = [];
+    const skipBreakdown = {
+      already_research: 0,
+      not_research: 0,
+      promoted_from_news: 0,
+      unique_violation: 0,
+    };
     let fetched = 0;
-    let inserted = 0;
+    let inserted = 0; // counts NEW research rows
+    let promoted = 0; // counts news → research updates
     let skipped = 0;
 
     try {
@@ -219,13 +226,14 @@ Deno.serve(async (req) => {
 
       for (const entry of entries) {
         try {
-          // Dedup pre-check on url (research stream must not duplicate news rows either)
           const { data: existing } = await admin
             .from("items")
             .select("id,item_type")
             .eq("url", entry.link)
             .maybeSingle();
-          if (existing) {
+
+          if (existing && existing.item_type === "research") {
+            skipBreakdown.already_research++;
             skipped++;
             continue;
           }
@@ -236,6 +244,7 @@ Deno.serve(async (req) => {
             continue;
           }
           if (!enriched.is_research) {
+            skipBreakdown.not_research++;
             skipped++;
             continue;
           }
@@ -247,29 +256,52 @@ Deno.serve(async (req) => {
             ...(enriched.research_type ? [enriched.research_type] : []),
           ]));
 
-          const { error: insErr } = await admin.from("items").insert({
-            source_id: sourceId,
-            item_type: "research",
-            region: enriched.region,
-            url: entry.link,
-            published_at: publishedAt,
-            title_orig: entry.title,
-            summary_orig: entry.description.slice(0, 2000),
-            title_he: enriched.title_he,
-            summary_he: enriched.summary_he,
-            why_it_matters: enriched.why_it_matters,
-            tags_ai: tags,
-            relevance_score: enriched.relevance_score,
-            is_seed: false,
-          });
-          if (insErr) {
-            if ((insErr as any).code === "23505") {
-              skipped++;
+          if (existing) {
+            // Promote news → research in place (URL stays unique)
+            const { error: updErr } = await admin
+              .from("items")
+              .update({
+                item_type: "research",
+                region: enriched.region,
+                title_he: enriched.title_he,
+                summary_he: enriched.summary_he,
+                why_it_matters: enriched.why_it_matters,
+                tags_ai: tags,
+                relevance_score: enriched.relevance_score,
+              })
+              .eq("id", existing.id);
+            if (updErr) {
+              errors.push({ stage: "promote", url: entry.link, message: updErr.message });
             } else {
-              errors.push({ stage: "insert", url: entry.link, message: insErr.message });
+              promoted++;
+              skipBreakdown.promoted_from_news++;
             }
           } else {
-            inserted++;
+            const { error: insErr } = await admin.from("items").insert({
+              source_id: sourceId,
+              item_type: "research",
+              region: enriched.region,
+              url: entry.link,
+              published_at: publishedAt,
+              title_orig: entry.title,
+              summary_orig: entry.description.slice(0, 2000),
+              title_he: enriched.title_he,
+              summary_he: enriched.summary_he,
+              why_it_matters: enriched.why_it_matters,
+              tags_ai: tags,
+              relevance_score: enriched.relevance_score,
+              is_seed: false,
+            });
+            if (insErr) {
+              if ((insErr as any).code === "23505") {
+                skipBreakdown.unique_violation++;
+                skipped++;
+              } else {
+                errors.push({ stage: "insert", url: entry.link, message: insErr.message });
+              }
+            } else {
+              inserted++;
+            }
           }
         } catch (e) {
           errors.push({
@@ -280,16 +312,28 @@ Deno.serve(async (req) => {
         }
       }
 
-      const status = errors.length === 0 ? "success" : inserted > 0 ? "partial" : "error";
+      // Surface skip breakdown so it shows up in Admin run-log
+      const breakdownEntry = {
+        stage: "summary",
+        message:
+          `inserted_new=${inserted} promoted_from_news=${promoted} ` +
+          `skipped_already_research=${skipBreakdown.already_research} ` +
+          `skipped_not_research=${skipBreakdown.not_research} ` +
+          `skipped_unique_violation=${skipBreakdown.unique_violation}`,
+      };
+      const errorsLog = [breakdownEntry, ...errors];
+
+      const totalChanged = inserted + promoted;
+      const status = errors.length === 0 ? "success" : totalChanged > 0 ? "partial" : "error";
       await admin
         .from("ingestion_runs")
         .update({
           finished_at: new Date().toISOString(),
           status,
           fetched,
-          inserted,
+          inserted: totalChanged,
           skipped,
-          errors_json: errors.length ? errors : null,
+          errors_json: errorsLog,
         })
         .eq("id", runId);
 
@@ -300,7 +344,9 @@ Deno.serve(async (req) => {
           source: sourceName,
           fetched,
           inserted,
+          promoted,
           skipped,
+          skip_breakdown: skipBreakdown,
           errors: errors.length,
           status,
         }),

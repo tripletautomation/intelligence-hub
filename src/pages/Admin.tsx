@@ -78,9 +78,16 @@ const Admin = () => {
         body: { max_items: 15 },
       });
       if (error) throw error;
-      const ins = (data as any)?.inserted ?? 0;
-      const fet = (data as any)?.fetched ?? 0;
-      toast.success(`Research — נמשכו ${fet}, נוספו ${ins} פריטי מחקר`);
+      const d = data as any;
+      const ins = d?.inserted ?? 0;
+      const prom = d?.promoted ?? 0;
+      const fet = d?.fetched ?? 0;
+      const skip = d?.skipped ?? 0;
+      const b = d?.skip_breakdown ?? {};
+      toast.success(
+        `Research — נמשכו ${fet} · חדשים ${ins} · קודמו מ-news ${prom} · דולגו ${skip}` +
+        (b ? ` (כבר research: ${b.already_research ?? 0}, לא-מחקר: ${b.not_research ?? 0})` : "")
+      );
       await Promise.all([refetchRuns(), qc.invalidateQueries({ queryKey: ["items"] })]);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "שגיאה בריצת Research");
