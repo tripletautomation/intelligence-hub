@@ -34,9 +34,11 @@ const Admin = () => {
   const { data: items = [] } = useItems();
   const [running, setRunning] = useState(false);
   const [runningResearch, setRunningResearch] = useState(false);
+  const [runningPageEvents, setRunningPageEvents] = useState(false);
   const [hideSeed, setHideSeed] = useState(() => localStorage.getItem("hideSeed") === "1");
 
   const realSources = sources.filter((s: any) => !s.is_seed && s.rss_url);
+  const pageEventSources = sources.filter((s: any) => s.type === "page" && s.category === "events" && s.active);
   const seedItemsCount = items.filter((i: any) => i.is_seed).length;
   const realItemsCount = items.length - seedItemsCount;
   const researchItemsCount = items.filter((i: any) => i.item_type === "research").length;
@@ -54,8 +56,9 @@ const Admin = () => {
     },
   });
 
-  const newsRuns = runs.filter((r) => r.triggered_by !== "manual-research").slice(0, 20);
+  const newsRuns = runs.filter((r) => r.triggered_by !== "manual-research" && r.triggered_by !== "manual-page-events").slice(0, 20);
   const researchRuns = runs.filter((r) => r.triggered_by === "manual-research").slice(0, 20);
+  const pageEventRuns = runs.filter((r) => r.triggered_by === "manual-page-events").slice(0, 20);
 
   const runIngestion = async (sourceId?: string) => {
     setRunning(true);
@@ -97,6 +100,23 @@ const Admin = () => {
       toast.error(e instanceof Error ? e.message : "שגיאה בריצת Research");
     } finally {
       setRunningResearch(false);
+    }
+  };
+
+  const runPageEventsIngestion = async () => {
+    setRunningPageEvents(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("ingest-page-events", { body: {} });
+      if (error) throw error;
+      const results = (data as any)?.results ?? [];
+      const totalInserted = results.reduce((s: number, r: any) => s + (r.inserted ?? 0), 0);
+      const totalFetched = results.reduce((s: number, r: any) => s + (r.fetched ?? 0), 0);
+      toast.success(`Page Events — נמשכו ${totalFetched} · חדשים ${totalInserted}`);
+      await Promise.all([refetchRuns(), qc.invalidateQueries({ queryKey: ["items"] })]);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה בריצת Page Events");
+    } finally {
+      setRunningPageEvents(false);
     }
   };
 
@@ -161,17 +181,34 @@ const Admin = () => {
           </div>
         </div>
 
-        <LogsMonitoringSection newsRuns={newsRuns} researchRuns={researchRuns} />
+        <div className="surface-card p-6">
+          <div className="flex items-center justify-between mb-2 gap-4 flex-wrap">
+            <div>
+              <h2 className="text-lg font-bold text-primary">הרצת Page Events ידנית</h2>
+              <p className="text-sm text-muted-foreground">
+                סורק עמודי אירועים (ללא RSS) דרך Firecrawl ומחלץ אירועים מובנים עם AI. נשמרים כ-<code className="text-xs">item_type=event</code>.
+              </p>
+            </div>
+            <Button onClick={runPageEventsIngestion} disabled={runningPageEvents || pageEventSources.length === 0} variant="secondary">
+              {runningPageEvents ? "רץ..." : "הרץ Page Events"}
+            </Button>
+          </div>
+          <div className="text-xs text-muted-foreground mt-2" dir="ltr">
+            Sources: {pageEventSources.length === 0 ? "none configured" : pageEventSources.map((s: any) => s.display_name ?? s.name).join(" · ")} · Firecrawl + Lovable AI · Manual only
+          </div>
+        </div>
+
+        <LogsMonitoringSection newsRuns={newsRuns} researchRuns={researchRuns} pageEventRuns={pageEventRuns} />
       </div>
     </AppLayout>
   );
 };
 
 const LogsMonitoringSection = ({
-  newsRuns, researchRuns,
-}: { newsRuns: IngestionRun[]; researchRuns: IngestionRun[] }) => {
+  newsRuns, researchRuns, pageEventRuns,
+}: { newsRuns: IngestionRun[]; researchRuns: IngestionRun[]; pageEventRuns: IngestionRun[] }) => {
   const [open, setOpen] = useState(false);
-  const allRuns = [...newsRuns, ...researchRuns].sort(
+  const allRuns = [...newsRuns, ...researchRuns, ...pageEventRuns].sort(
     (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime(),
   );
   const last = allRuns[0];
@@ -216,6 +253,7 @@ const LogsMonitoringSection = ({
       <CollapsibleContent className="px-4 pb-4 pt-0 space-y-4">
         <RunsLogCard title="לוג ריצות — News" runs={newsRuns} />
         <RunsLogCard title="לוג ריצות — Research" runs={researchRuns} />
+        <RunsLogCard title="לוג ריצות — Page Events" runs={pageEventRuns} />
       </CollapsibleContent>
     </Collapsible>
   );
