@@ -144,51 +144,73 @@ const Admin = () => {
         </div>
 
         <div className="surface-card p-6">
-          <h2 className="text-lg font-bold text-primary mb-4">לוג ריצות אחרונות</h2>
-          {runs.length === 0 ? (
-            <div className="text-sm text-muted-foreground">אין ריצות עדיין</div>
-          ) : (
-            <div className="space-y-2">
-              {runs.map((r) => (
-                <div key={r.id} className="p-3 rounded-md border border-border bg-background/50">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <StatusDot status={r.status} />
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium truncate">{r.source_name ?? "—"}</div>
-                        <div className="text-xs text-muted-foreground">{formatHeRelative(r.started_at)}</div>
-                      </div>
-                    </div>
-                    <div className="text-xs text-muted-foreground flex gap-4 shrink-0">
-                      <span>נמשכו: <b className="text-foreground">{r.fetched}</b></span>
-                      <span>חדשים: <b className="text-foreground">{r.inserted}</b></span>
-                      <span>דילוגים: <b className="text-foreground">{r.skipped}</b></span>
-                      <span className={cn(r.errors_json && "text-destructive")}>
-                        שגיאות: <b>{r.errors_json?.length ?? 0}</b>
-                      </span>
-                    </div>
-                  </div>
-                  {r.errors_json && r.errors_json.length > 0 && (
-                    <details className="mt-2">
-                      <summary className="text-xs text-muted-foreground cursor-pointer">הצג שגיאות</summary>
-                      <ul className="mt-2 space-y-1 text-xs">
-                        {r.errors_json.slice(0, 5).map((e, i) => (
-                          <li key={i} className="text-destructive" dir="ltr">
-                            [{e.stage}] {e.message}{e.url ? ` — ${e.url}` : ""}
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
-                </div>
-              ))}
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h2 className="text-lg font-bold text-primary">הרצת Research ידנית</h2>
+              <p className="text-sm text-muted-foreground">
+                שואב מ-DCD RSS ומסנן דרך AI — נשמרים רק whitepapers / reports / studies / analyses כ-<code className="text-xs">item_type=research</code>.
+              </p>
             </div>
-          )}
+            <Button onClick={runResearchIngestion} disabled={runningResearch} variant="secondary">
+              {runningResearch ? "רץ..." : "הרץ Research"}
+            </Button>
+          </div>
+          <div className="text-xs text-muted-foreground mt-2" dir="ltr">
+            Source: DCD main RSS · Filter: AI strict (is_research=true only) · Manual only
+          </div>
         </div>
+
+        <RunsLogCard title="לוג ריצות — News" runs={newsRuns} />
+        <RunsLogCard title="לוג ריצות — Research" runs={researchRuns} />
       </div>
     </AppLayout>
   );
 };
+
+const RunsLogCard = ({ title, runs }: { title: string; runs: IngestionRun[] }) => (
+  <div className="surface-card p-6">
+    <h2 className="text-lg font-bold text-primary mb-4">{title}</h2>
+    {runs.length === 0 ? (
+      <div className="text-sm text-muted-foreground">אין ריצות עדיין</div>
+    ) : (
+      <div className="space-y-2">
+        {runs.map((r) => (
+          <div key={r.id} className="p-3 rounded-md border border-border bg-background/50">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <StatusDot status={r.status} />
+                <div className="min-w-0">
+                  <div className="text-sm font-medium truncate">{r.source_name ?? "—"}</div>
+                  <div className="text-xs text-muted-foreground">{formatHeRelative(r.started_at)}</div>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground flex gap-4 shrink-0">
+                <span>נמשכו: <b className="text-foreground">{r.fetched}</b></span>
+                <span>חדשים: <b className="text-foreground">{r.inserted}</b></span>
+                <span>דילוגים: <b className="text-foreground">{r.skipped}</b></span>
+                <span className={cn(r.errors_json && "text-destructive")}>
+                  שגיאות: <b>{r.errors_json?.length ?? 0}</b>
+                </span>
+              </div>
+            </div>
+            {r.errors_json && r.errors_json.length > 0 && (
+              <details className="mt-2">
+                <summary className="text-xs text-muted-foreground cursor-pointer">הצג שגיאות</summary>
+                <ul className="mt-2 space-y-1 text-xs">
+                  {r.errors_json.slice(0, 5).map((e, i) => (
+                    <li key={i} className="text-destructive" dir="ltr">
+                      [{e.stage}] {e.message}{e.url ? ` — ${e.url}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+);
 
 const Stat = ({ label, value, accent }: { label: string; value: number; accent?: boolean }) => (
   <div className="rounded-md border border-border p-4 bg-background/50">
