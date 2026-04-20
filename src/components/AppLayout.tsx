@@ -47,10 +47,11 @@ export const AppLayout = ({ children, search, onSearchChange }: Props) => {
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
-              <User className="h-4 w-4" />
-              <span dir="ltr">{user?.email}</span>
-            </div>
+            {greetingName && (
+              <div className="hidden sm:block text-sm text-muted-foreground">
+                שלום, <span className="text-foreground font-medium">{greetingName}</span>
+              </div>
+            )}
             <Button
               variant="ghost"
               size="sm"
