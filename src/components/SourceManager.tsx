@@ -371,7 +371,24 @@ export const SourceManager = ({ onRunSource }: { onRunSource: (sourceId: string)
               </div>
             </Field>
             <Field label="Base URL" full>
-              <Input dir="ltr" value={form.url ?? ""} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://..." maxLength={500} />
+              <div className="flex gap-2">
+                <Input dir="ltr" value={form.url ?? ""} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://..." maxLength={500} />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={detectRss}
+                  disabled={detecting || (!form.url && !form.rss_url)}
+                  className="gap-1.5 shrink-0"
+                  title="זהה RSS אוטומטית מתוך הדומיין"
+                >
+                  {detecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                  זהה RSS
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                בודק את ה-URL כפי שהוא, מסלולי RSS נפוצים, וקישורי alternate בעמוד. עוזר אך לא מובטח.
+              </p>
             </Field>
             <Field label="RSS URL" full>
               <div className="flex gap-2">
@@ -380,6 +397,7 @@ export const SourceManager = ({ onRunSource }: { onRunSource: (sourceId: string)
                   {validating ? <Loader2 className="h-4 w-4 animate-spin" /> : "בדוק"}
                 </Button>
               </div>
+              {detectResult && <DetectBanner r={detectResult} />}
             </Field>
             <Field label="הערות" full>
               <Textarea value={form.notes ?? ""} onChange={(e) => setForm({ ...form, notes: e.target.value })} maxLength={2000} rows={3} />
