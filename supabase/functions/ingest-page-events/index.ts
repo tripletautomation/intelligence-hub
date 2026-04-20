@@ -44,7 +44,7 @@ async function firecrawlScrape(url: string): Promise<string> {
       url,
       formats: ["markdown"],
       onlyMainContent: true,
-      waitFor: 2000,
+      waitFor: 5000,
     }),
   });
   const data = await res.json();
@@ -56,7 +56,12 @@ async function firecrawlScrape(url: string): Promise<string> {
   return md;
 }
 
-async function extractEvents(pageUrl: string, markdown: string): Promise<ExtractedEvent[]> {
+async function extractEvents(
+  pageUrl: string,
+  markdown: string,
+  debug: { raw?: string; mdLen?: number; finishReason?: string; rawArgs?: string },
+): Promise<ExtractedEvent[]> {
+  debug.mdLen = markdown.length;
   const sys =
     "You extract structured event records from a scraped events page (markdown). " +
     "Return ONLY events that are clearly listed as upcoming or recent events. Skip navigation, footers, generic links. " +
@@ -72,7 +77,7 @@ async function extractEvents(pageUrl: string, markdown: string): Promise<Extract
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
+      model: "google/gemini-2.5-pro",
       messages: [
         { role: "system", content: sys },
         { role: "user", content: user },
@@ -122,10 +127,19 @@ async function extractEvents(pageUrl: string, markdown: string): Promise<Extract
     throw new Error(`AI gateway ${res.status}: ${t.slice(0, 200)}`);
   }
   const data = await res.json();
-  const call = data.choices?.[0]?.message?.tool_calls?.[0];
-  if (!call?.function?.arguments) return [];
+  const choice = data.choices?.[0];
+  debug.finishReason = choice?.finish_reason;
+  const call = choice?.message?.tool_calls?.[0];
+  const rawArgs: string | undefined = call?.function?.arguments;
+  debug.rawArgs = rawArgs ? rawArgs.slice(0, 1000) : undefined;
+  debug.raw = JSON.stringify({
+    finish_reason: choice?.finish_reason,
+    has_tool_call: !!call,
+    content_preview: typeof choice?.message?.content === "string" ? choice.message.content.slice(0, 300) : null,
+  });
+  if (!rawArgs) return [];
   try {
-    const parsed = JSON.parse(call.function.arguments);
+    const parsed = JSON.parse(rawArgs);
     return Array.isArray(parsed.events) ? parsed.events : [];
   } catch {
     return [];
@@ -156,9 +170,16 @@ async function ingestPageSource(source: {
 
   try {
     const md = await firecrawlScrape(source.url);
-    const events = await extractEvents(source.url, md);
+    const debug: { raw?: string; mdLen?: number; finishReason?: string; rawArgs?: string } = {};
+    const events = await extractEvents(source.url, md, debug);
     fetched = events.length;
-
+    if (events.length === 0) {
+      errors.push({
+        stage: "ai-empty",
+        url: source.url,
+        message: `No events extracted. md_len=${debug.mdLen} finish=${debug.finishReason} raw=${debug.raw ?? ""} args=${debug.rawArgs ?? ""}`,
+      });
+    }
     for (const ev of events) {
       try {
         if (!ev.source_link || !ev.title_he) {
