@@ -2,9 +2,18 @@ import { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { useIsAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { LogOut, Search } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { LogOut, Search, Settings, Shield, ChevronDown, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -14,18 +23,22 @@ interface Props {
 }
 
 const tabs = [
-  { to: "/", label: "היום", end: true },
-  { to: "/archive", label: "ארכיון" },
+  { to: "/", label: "ראשי", end: true },
   { to: "/events", label: "אירועים" },
-  { to: "/preferences", label: "העדפות" },
-  { to: "/admin", label: "ניהול" },
+  { to: "/archive", label: "ארכיון" },
 ];
 
 export const AppLayout = ({ children, search, onSearchChange }: Props) => {
   const { user, signOut } = useAuth();
   const { data: profile } = useProfile();
+  const { data: isAdmin } = useIsAdmin();
   const greetingName = profile?.first_name?.trim() || user?.email?.split("@")[0] || "";
   const nav = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    nav("/auth");
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -46,24 +59,37 @@ export const AppLayout = ({ children, search, onSearchChange }: Props) => {
             />
           </div>
 
-          <div className="flex items-center gap-2">
-            {greetingName && (
-              <div className="hidden sm:block text-sm text-muted-foreground">
-                שלום, <span className="text-foreground font-medium">{greetingName}</span>
-              </div>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={async () => {
-                await signOut();
-                nav("/auth");
-              }}
-              className="gap-1.5"
-            >
-              <LogOut className="h-4 w-4" /> יציאה
-            </Button>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="gap-2">
+                <span className="h-7 w-7 rounded-full bg-muted flex items-center justify-center text-xs font-semibold text-foreground">
+                  {greetingName ? greetingName.charAt(0).toUpperCase() : <User className="h-3.5 w-3.5" />}
+                </span>
+                <span className="hidden sm:inline text-sm">
+                  שלום, <span className="text-foreground font-medium">{greetingName || "אורח"}</span>
+                </span>
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="font-normal text-xs text-muted-foreground">
+                {user?.email}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => nav("/preferences")} className="gap-2 cursor-pointer">
+                <Settings className="h-4 w-4" /> העדפות
+              </DropdownMenuItem>
+              {isAdmin && (
+                <DropdownMenuItem onClick={() => nav("/admin")} className="gap-2 cursor-pointer">
+                  <Shield className="h-4 w-4" /> ניהול
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleSignOut} className="gap-2 cursor-pointer text-destructive focus:text-destructive">
+                <LogOut className="h-4 w-4" /> יציאה
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <nav className="max-w-7xl mx-auto px-6 flex gap-1 border-t border-border">
