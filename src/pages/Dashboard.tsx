@@ -124,12 +124,10 @@ const Dashboard = () => {
             "טרם עודכן"
           )}
         </div>
-        {isAdmin && (
-          <Button size="sm" variant="outline" onClick={handleRefresh} disabled={refreshing} className="gap-1.5">
-            <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
-            {refreshing ? "מרענן..." : "רענן עכשיו"}
-          </Button>
-        )}
+        <Button size="sm" variant="outline" onClick={handleRefresh} disabled={refreshing} className="gap-1.5">
+          <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+          {refreshing ? "מרענן..." : "רענן עכשיו"}
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
