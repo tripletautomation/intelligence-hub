@@ -1,9 +1,10 @@
 import { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { LogOut, Search, User } from "lucide-react";
+import { LogOut, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Props {
