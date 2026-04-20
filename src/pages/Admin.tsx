@@ -34,9 +34,11 @@ const Admin = () => {
   const { data: items = [] } = useItems();
   const [running, setRunning] = useState(false);
   const [runningResearch, setRunningResearch] = useState(false);
+  const [runningPageEvents, setRunningPageEvents] = useState(false);
   const [hideSeed, setHideSeed] = useState(() => localStorage.getItem("hideSeed") === "1");
 
   const realSources = sources.filter((s: any) => !s.is_seed && s.rss_url);
+  const pageEventSources = sources.filter((s: any) => s.type === "page" && s.category === "events" && s.active);
   const seedItemsCount = items.filter((i: any) => i.is_seed).length;
   const realItemsCount = items.length - seedItemsCount;
   const researchItemsCount = items.filter((i: any) => i.item_type === "research").length;
