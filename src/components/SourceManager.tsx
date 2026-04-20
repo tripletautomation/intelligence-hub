@@ -18,7 +18,13 @@ import { useSources } from "@/hooks/useIntelligence";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Loader2, Pencil, Archive, Play, RotateCcw, Plus, ShieldAlert, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, Pencil, Archive, Play, RotateCcw, Plus, ShieldAlert, CheckCircle2, XCircle, Wand2, AlertCircle, HelpCircle } from "lucide-react";
+
+type DetectResult =
+  | { result: "valid"; rss_url: string; item_count: number; via: "input" | "pattern" | "alternate"; tried?: string[] }
+  | { result: "invalid"; rss_url: string; reason: string; tried?: string[] }
+  | { result: "not_found"; tried?: string[] }
+  | { result: "manual_review"; reason: string; tried?: string[] };
 
 type SourceStatus = "valid" | "invalid" | "pending" | "archived";
 
