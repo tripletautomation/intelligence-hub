@@ -44,7 +44,7 @@ async function firecrawlScrape(url: string): Promise<string> {
       url,
       formats: ["markdown"],
       onlyMainContent: true,
-      waitFor: 2000,
+      waitFor: 5000,
     }),
   });
   const data = await res.json();
