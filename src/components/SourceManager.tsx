@@ -100,6 +100,7 @@ export const SourceManager = ({ onRunSource }: { onRunSource: (sourceId: string)
   const openCreate = () => {
     setEditing(null);
     setForm(emptyForm);
+    setDetectResult(null);
     setCreating(true);
   };
   const openEdit = (s: SourceRow) => {
@@ -115,7 +116,39 @@ export const SourceManager = ({ onRunSource }: { onRunSource: (sourceId: string)
       active: s.active,
       notes: s.notes ?? "",
     });
+    setDetectResult(null);
     setCreating(true);
+  };
+
+  const detectRss = async () => {
+    const candidate = (form.rss_url?.trim() || form.url?.trim() || "").trim();
+    if (!candidate || !/^https?:\/\//i.test(candidate)) {
+      toast.error("הזן Base URL או RSS URL חוקי קודם");
+      return;
+    }
+    setDetecting(true);
+    setDetectResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("detect-rss", { body: { url: candidate } });
+      if (error) throw error;
+      const r = data as DetectResult;
+      setDetectResult(r);
+      if (r.result === "valid") {
+        setForm((f) => ({ ...f, rss_url: r.rss_url }));
+        toast.success(`נמצא RSS תקין (${r.item_count} פריטים) — ${labelVia(r.via)}`);
+      } else if (r.result === "invalid") {
+        toast.error(`ה-URL הגיב אך אינו feed תקין (${r.reason})`);
+      } else if (r.result === "not_found") {
+        toast.error("לא נמצא RSS אוטומטית — סמן ידנית או הזן URL ישיר");
+      } else {
+        toast.error(`דרושה בדיקה ידנית: ${r.reason}`);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה בזיהוי");
+      setDetectResult({ result: "manual_review", reason: "error" });
+    } finally {
+      setDetecting(false);
+    }
   };
 
   const validateRss = async (): Promise<{ valid: boolean; reason?: string; status?: SourceStatus }> => {
