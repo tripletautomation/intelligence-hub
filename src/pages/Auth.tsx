@@ -24,16 +24,32 @@ const Auth = () => {
       return;
     }
     setBusy(true);
-    const { error } =
-      mode === "in"
-        ? await signIn(email, password)
-        : await signUp(email, password, firstName);
-    setBusy(false);
-    if (error) {
-      toast.error(error);
+    if (mode === "in") {
+      const { error } = await signIn(email, password);
+      setBusy(false);
+      if (error) {
+        toast.error(error);
+      } else {
+        toast.success("ברוך שובך");
+        nav("/");
+      }
     } else {
-      toast.success(mode === "in" ? "ברוך שובך" : "החשבון נוצר");
-      nav("/");
+      const { error } = await signUp(email, password, firstName);
+      if (error) {
+        setBusy(false);
+        toast.error(error);
+        return;
+      }
+      // Auto sign-in after signup
+      const { error: signInErr } = await signIn(email, password);
+      setBusy(false);
+      if (signInErr) {
+        toast.success("החשבון נוצר. אנא התחבר/י");
+        setMode("in");
+      } else {
+        toast.success("החשבון נוצר");
+        nav("/");
+      }
     }
   };
 
@@ -44,7 +60,7 @@ const Auth = () => {
           <div className="text-xs uppercase tracking-widest text-accent font-semibold">Triple T</div>
           <h1 className="text-2xl mt-1">מרכז המודיעין הפנימי</h1>
           <p className="text-muted-foreground text-sm mt-2">
-            {mode === "in" ? "התחברי כדי להמשיך" : "פתיחת חשבון פנימי חדש"}
+            {mode === "in" ? "התחברות בשביל להמשיך" : "פתיחת חשבון פנימי חדש"}
           </p>
         </div>
         <form onSubmit={handle} className="space-y-4">
@@ -58,7 +74,7 @@ const Auth = () => {
                 maxLength={60}
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
-                placeholder="לדוגמה: שפיר"
+                placeholder="שם פרטי"
               />
             </div>
           )}
