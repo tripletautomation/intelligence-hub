@@ -33,33 +33,70 @@ interface ExtractedEvent {
   title_he: string;
 }
 
-async function firecrawlScrape(url: string): Promise<string> {
-  const res = await fetch("https://api.firecrawl.dev/v2/scrape", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      url,
-      formats: ["markdown"],
-      onlyMainContent: true,
-      waitFor: 8000,
-      timeout: 60000,
-      proxy: "stealth",
-      blockAds: true,
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(`Firecrawl ${res.status}: ${(data?.error ?? JSON.stringify(data)).toString().slice(0, 300)}`);
+async function firecrawlScrape(url: string): Promise<{ markdown: string; resolvedUrl: string }> {
+  const candidates = [url];
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes("datacenterdynamics.com")) {
+      candidates.push(
+        "https://www.datacenterdynamics.com/en/conferences/",
+        "https://www.datacenterdynamics.com/en/broadcasts/upcoming/",
+      );
+    }
+  } catch {
+    // ignore invalid source URL and let the original request fail below
   }
-  const md: string | undefined = data?.data?.markdown ?? data?.markdown;
-  if (!md) throw new Error("Firecrawl returned no markdown");
-  if (md.length < 500) {
-    throw new Error(`Firecrawl returned suspiciously short markdown (${md.length} chars) — likely blocked or not rendered`);
+
+  const seen = new Set<string>();
+  const attempts: string[] = [];
+
+  for (const candidate of candidates) {
+    if (!candidate || seen.has(candidate)) continue;
+    seen.add(candidate);
+
+    const res = await fetch("https://api.firecrawl.dev/v2/scrape", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url: candidate,
+        formats: ["markdown"],
+        onlyMainContent: true,
+        waitFor: 8000,
+        timeout: 60000,
+        proxy: "stealth",
+        blockAds: true,
+      }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      attempts.push(`${candidate} -> http ${res.status}`);
+      continue;
+    }
+
+    const md: string | undefined = data?.data?.markdown ?? data?.markdown;
+    if (!md) {
+      attempts.push(`${candidate} -> no markdown`);
+      continue;
+    }
+
+    const normalized = md.replace(/\s+/g, " ").trim().toLowerCase();
+    if (normalized.includes("sorry, we couldn't find this page")) {
+      attempts.push(`${candidate} -> 404 page`);
+      continue;
+    }
+    if (md.length < 500) {
+      attempts.push(`${candidate} -> short markdown (${md.length} chars)`);
+      continue;
+    }
+
+    return { markdown: md, resolvedUrl: candidate };
   }
-  return md;
+
+  throw new Error(`Firecrawl failed for all candidates: ${attempts.join(" | ").slice(0, 500)}`);
 }
 
 async function extractEvents(
