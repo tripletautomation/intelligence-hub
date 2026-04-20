@@ -81,6 +81,8 @@ export const SourceManager = ({ onRunSource }: { onRunSource: (sourceId: string)
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [validating, setValidating] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const [detectResult, setDetectResult] = useState<DetectResult | null>(null);
   const [saving, setSaving] = useState(false);
   const [runningId, setRunningId] = useState<string | null>(null);
 
