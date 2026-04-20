@@ -103,6 +103,23 @@ const Admin = () => {
     }
   };
 
+  const runPageEventsIngestion = async () => {
+    setRunningPageEvents(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("ingest-page-events", { body: {} });
+      if (error) throw error;
+      const results = (data as any)?.results ?? [];
+      const totalInserted = results.reduce((s: number, r: any) => s + (r.inserted ?? 0), 0);
+      const totalFetched = results.reduce((s: number, r: any) => s + (r.fetched ?? 0), 0);
+      toast.success(`Page Events — נמשכו ${totalFetched} · חדשים ${totalInserted}`);
+      await Promise.all([refetchRuns(), qc.invalidateQueries({ queryKey: ["items"] })]);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה בריצת Page Events");
+    } finally {
+      setRunningPageEvents(false);
+    }
+  };
+
   const toggleHideSeed = (v: boolean) => {
     setHideSeed(v);
     localStorage.setItem("hideSeed", v ? "1" : "0");
