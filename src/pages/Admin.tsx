@@ -101,8 +101,9 @@ const Admin = () => {
         <div className="surface-card p-6">
           <h2 className="text-lg font-bold text-primary mb-1">מצב נתונים</h2>
           <p className="text-sm text-muted-foreground mb-4">סקירה של seed מול תוכן אמיתי שהוטמע</p>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Stat label="פריטים אמיתיים" value={realItemsCount} accent />
+            <Stat label="פריטי Research" value={researchItemsCount} />
             <Stat label="פריטי seed (דמו)" value={seedItemsCount} />
             <Stat label="מקורות פעילים עם RSS" value={realSources.length} />
           </div>
