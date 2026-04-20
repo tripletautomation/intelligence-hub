@@ -29,11 +29,13 @@ const Admin = () => {
   const { data: sources = [] } = useSources();
   const { data: items = [] } = useItems();
   const [running, setRunning] = useState(false);
+  const [runningResearch, setRunningResearch] = useState(false);
   const [hideSeed, setHideSeed] = useState(() => localStorage.getItem("hideSeed") === "1");
 
   const realSources = sources.filter((s: any) => !s.is_seed && s.rss_url);
   const seedItemsCount = items.filter((i: any) => i.is_seed).length;
   const realItemsCount = items.length - seedItemsCount;
+  const researchItemsCount = items.filter((i: any) => i.item_type === "research").length;
 
   const { data: runs = [], refetch: refetchRuns } = useQuery({
     queryKey: ["ingestion_runs"],
@@ -42,11 +44,14 @@ const Admin = () => {
         .from("ingestion_runs")
         .select("*")
         .order("started_at", { ascending: false })
-        .limit(20);
+        .limit(40);
       if (error) throw error;
       return data ?? [];
     },
   });
+
+  const newsRuns = runs.filter((r) => r.triggered_by !== "manual-research").slice(0, 20);
+  const researchRuns = runs.filter((r) => r.triggered_by === "manual-research").slice(0, 20);
 
   const runIngestion = async (sourceId?: string) => {
     setRunning(true);
@@ -63,6 +68,24 @@ const Admin = () => {
       toast.error(e instanceof Error ? e.message : "שגיאה בריצה");
     } finally {
       setRunning(false);
+    }
+  };
+
+  const runResearchIngestion = async () => {
+    setRunningResearch(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("ingest-research", {
+        body: { max_items: 15 },
+      });
+      if (error) throw error;
+      const ins = (data as any)?.inserted ?? 0;
+      const fet = (data as any)?.fetched ?? 0;
+      toast.success(`Research — נמשכו ${fet}, נוספו ${ins} פריטי מחקר`);
+      await Promise.all([refetchRuns(), qc.invalidateQueries({ queryKey: ["items"] })]);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה בריצת Research");
+    } finally {
+      setRunningResearch(false);
     }
   };
 
