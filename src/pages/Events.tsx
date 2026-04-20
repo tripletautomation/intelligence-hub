@@ -164,11 +164,7 @@ const EventCard = ({ ev, source, isPast }: { ev: Item; source?: Source; isPast?:
   >
     <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3 flex-wrap">
       <RegionBadge region={ev.region} />
-      {source && (
-        <span className="font-medium text-foreground/70">
-          {source.display_name || source.name}
-        </span>
-      )}
+      {source && <span className="font-medium text-foreground/70">{source.name}</span>}
       {isPast && (
         <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
           <Clock className="h-3 w-3" /> עבר
