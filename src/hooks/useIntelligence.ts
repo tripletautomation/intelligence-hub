@@ -27,10 +27,13 @@ export const useItems = () =>
   useQuery({
     queryKey: ["items"],
     queryFn: async (): Promise<Item[]> => {
-      const { data, error } = await supabase
+      const hideSeed = typeof window !== "undefined" && localStorage.getItem("hideSeed") === "1";
+      let q = supabase
         .from("items")
         .select("*")
         .order("published_at", { ascending: false, nullsFirst: false });
+      if (hideSeed) q = q.eq("is_seed", false);
+      const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as Item[];
     },
