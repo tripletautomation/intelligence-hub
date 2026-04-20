@@ -506,3 +506,52 @@ const StatusBadge = ({ status }: { status: SourceStatus }) => {
     </Badge>
   );
 };
+
+const labelVia = (via: "input" | "pattern" | "alternate") =>
+  via === "input" ? "URL ישיר" : via === "pattern" ? "מסלול נפוץ" : "קישור alternate בעמוד";
+
+const DetectBanner = ({ r }: { r: DetectResult }) => {
+  if (r.result === "valid") {
+    return (
+      <div className="mt-2 p-2.5 rounded-md border border-green-500/30 bg-green-500/10 text-xs flex items-start gap-2">
+        <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+        <div className="min-w-0">
+          <div className="font-medium text-green-700">נמצא RSS תקין · {r.item_count} פריטים · {labelVia(r.via)}</div>
+          <div className="text-muted-foreground truncate" dir="ltr">{r.rss_url}</div>
+        </div>
+      </div>
+    );
+  }
+  if (r.result === "invalid") {
+    return (
+      <div className="mt-2 p-2.5 rounded-md border border-destructive/30 bg-destructive/10 text-xs flex items-start gap-2">
+        <XCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+        <div className="min-w-0">
+          <div className="font-medium text-destructive">ה-URL הגיב אך אינו feed תקין</div>
+          <div className="text-muted-foreground">סיבה: {r.reason}</div>
+        </div>
+      </div>
+    );
+  }
+  if (r.result === "not_found") {
+    const tried = r.tried?.length ?? 0;
+    return (
+      <div className="mt-2 p-2.5 rounded-md border border-amber-500/30 bg-amber-500/10 text-xs flex items-start gap-2">
+        <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+        <div>
+          <div className="font-medium text-amber-700">לא נמצא RSS אוטומטית</div>
+          <div className="text-muted-foreground">נוסו {tried} כתובות. אפשר להזין RSS URL ישירות ולבדוק.</div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-2 p-2.5 rounded-md border border-muted bg-muted/30 text-xs flex items-start gap-2">
+      <HelpCircle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+      <div>
+        <div className="font-medium">דרושה בדיקה ידנית</div>
+        <div className="text-muted-foreground">{r.reason}</div>
+      </div>
+    </div>
+  );
+};
