@@ -1,8 +1,15 @@
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/AppLayout";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDrawer } from "@/components/ItemDrawer";
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-react";
 import { useItems, useSources, useUserActions, useLogAction, deriveItemStates } from "@/hooks/useIntelligence";
+import { useIsAdmin } from "@/hooks/useAdmin";
+import { supabase } from "@/integrations/supabase/client";
+import { formatHeRelative } from "@/lib/format";
+import { toast } from "sonner";
 import type { Item, ActionType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
