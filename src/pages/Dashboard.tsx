@@ -112,6 +112,26 @@ const Dashboard = () => {
 
   return (
     <AppLayout search={search} onSearchChange={setSearch}>
+      <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
+        <div className="text-xs text-muted-foreground">
+          {refreshing ? (
+            <span className="inline-flex items-center gap-1.5 text-foreground">
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" /> מרענן עכשיו...
+            </span>
+          ) : lastUpdatedIso ? (
+            <>עודכן לאחרונה <span className="text-foreground font-medium">{formatHeRelative(lastUpdatedIso)}</span></>
+          ) : (
+            "טרם עודכן"
+          )}
+        </div>
+        {isAdmin && (
+          <Button size="sm" variant="outline" onClick={handleRefresh} disabled={refreshing} className="gap-1.5">
+            <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+            {refreshing ? "מרענן..." : "רענן עכשיו"}
+          </Button>
+        )}
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <KpiCard label="פריטים חדשים היום" value={kpi.newToday} />
         <KpiCard label="לא נקראו" value={kpi.unread} accent />
