@@ -6,7 +6,7 @@ import { ItemDrawer } from "@/components/ItemDrawer";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { useItems, useSources, useUserActions, useLogAction, deriveItemStates } from "@/hooks/useIntelligence";
-import { useIsAdmin } from "@/hooks/useAdmin";
+
 import { supabase } from "@/integrations/supabase/client";
 import { formatHeRelative } from "@/lib/format";
 import { toast } from "sonner";
@@ -31,7 +31,7 @@ const Dashboard = () => {
   const { data: items = [], dataUpdatedAt, refetch: refetchItems } = useItems();
   const { data: sources = [] } = useSources();
   const { data: actions } = useUserActions();
-  const { data: isAdmin = false } = useIsAdmin();
+  
   const log = useLogAction();
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
@@ -124,12 +124,10 @@ const Dashboard = () => {
             "טרם עודכן"
           )}
         </div>
-        {isAdmin && (
-          <Button size="sm" variant="outline" onClick={handleRefresh} disabled={refreshing} className="gap-1.5">
-            <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
-            {refreshing ? "מרענן..." : "רענן עכשיו"}
-          </Button>
-        )}
+        <Button size="sm" variant="outline" onClick={handleRefresh} disabled={refreshing} className="gap-1.5">
+          <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+          {refreshing ? "מרענן..." : "רענן עכשיו"}
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
