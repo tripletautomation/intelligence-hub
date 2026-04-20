@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { formatHeRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { SourceManager } from "@/components/SourceManager";
+import { UserAccessManager } from "@/components/UserAccessManager";
 import { ChevronDown, AlertTriangle, Activity } from "lucide-react";
 
 interface IngestionRun {
@@ -140,6 +141,8 @@ const Admin = () => {
         </div>
 
         <SourceManager onRunSource={(id) => runIngestion(id)} />
+
+        <UserAccessManager />
 
         <div className="surface-card p-6">
           <div className="flex items-center justify-between mb-2">
