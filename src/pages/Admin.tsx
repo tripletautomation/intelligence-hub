@@ -4,12 +4,14 @@ import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { useSources, useItems } from "@/hooks/useIntelligence";
 import { toast } from "sonner";
 import { formatHeRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { SourceManager } from "@/components/SourceManager";
+import { ChevronDown, AlertTriangle, Activity } from "lucide-react";
 
 interface IngestionRun {
   id: string;
