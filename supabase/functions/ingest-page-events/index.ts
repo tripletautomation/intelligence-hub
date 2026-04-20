@@ -106,12 +106,13 @@ async function extractEvents(
 ): Promise<ExtractedEvent[]> {
   debug.mdLen = markdown.length;
   const sys =
-    "You extract structured event records from a scraped events page (markdown). " +
-    "Return ONLY events that are clearly listed as upcoming or recent events. Skip navigation, footers, generic links. " +
+    "You extract structured event records from a scraped events listing page (markdown). " +
+    "The page may be a conferences, broadcasts, or upcoming events index rather than a URL literally named events. " +
+    "Return ONLY concrete upcoming or recent event records that a user could attend or watch. Skip navigation, cookie banners, ads, footers, news articles, and generic marketing copy. " +
     "Translate title and summary to Hebrew. Provide a 1-sentence Hebrew 'why it matters' for an Israeli data-center professional. " +
     "If event_date is unknown or ambiguous, set it to null. Use ISO 8601 with timezone if possible. " +
     "Resolve relative URLs against the page URL.";
-  const user = `Page URL: ${pageUrl}\n\nPage markdown (truncated):\n${markdown.slice(0, 18000)}`;
+  const user = `Page URL: ${pageUrl}\n\nPage markdown (truncated):\n${markdown.slice(0, 30000)}`;
 
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
