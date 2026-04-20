@@ -18,7 +18,13 @@ import { useSources } from "@/hooks/useIntelligence";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Loader2, Pencil, Archive, Play, RotateCcw, Plus, ShieldAlert, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, Pencil, Archive, Play, RotateCcw, Plus, ShieldAlert, CheckCircle2, XCircle, Wand2, AlertCircle, HelpCircle } from "lucide-react";
+
+type DetectResult =
+  | { result: "valid"; rss_url: string; item_count: number; via: "input" | "pattern" | "alternate"; tried?: string[] }
+  | { result: "invalid"; rss_url: string; reason: string; tried?: string[] }
+  | { result: "not_found"; tried?: string[] }
+  | { result: "manual_review"; reason: string; tried?: string[] };
 
 type SourceStatus = "valid" | "invalid" | "pending" | "archived";
 
@@ -75,6 +81,8 @@ export const SourceManager = ({ onRunSource }: { onRunSource: (sourceId: string)
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [validating, setValidating] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const [detectResult, setDetectResult] = useState<DetectResult | null>(null);
   const [saving, setSaving] = useState(false);
   const [runningId, setRunningId] = useState<string | null>(null);
 
@@ -92,6 +100,7 @@ export const SourceManager = ({ onRunSource }: { onRunSource: (sourceId: string)
   const openCreate = () => {
     setEditing(null);
     setForm(emptyForm);
+    setDetectResult(null);
     setCreating(true);
   };
   const openEdit = (s: SourceRow) => {
@@ -107,7 +116,39 @@ export const SourceManager = ({ onRunSource }: { onRunSource: (sourceId: string)
       active: s.active,
       notes: s.notes ?? "",
     });
+    setDetectResult(null);
     setCreating(true);
+  };
+
+  const detectRss = async () => {
+    const candidate = (form.rss_url?.trim() || form.url?.trim() || "").trim();
+    if (!candidate || !/^https?:\/\//i.test(candidate)) {
+      toast.error("הזן Base URL או RSS URL חוקי קודם");
+      return;
+    }
+    setDetecting(true);
+    setDetectResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("detect-rss", { body: { url: candidate } });
+      if (error) throw error;
+      const r = data as DetectResult;
+      setDetectResult(r);
+      if (r.result === "valid") {
+        setForm((f) => ({ ...f, rss_url: r.rss_url }));
+        toast.success(`נמצא RSS תקין (${r.item_count} פריטים) — ${labelVia(r.via)}`);
+      } else if (r.result === "invalid") {
+        toast.error(`ה-URL הגיב אך אינו feed תקין (${r.reason})`);
+      } else if (r.result === "not_found") {
+        toast.error("לא נמצא RSS אוטומטית — סמן ידנית או הזן URL ישיר");
+      } else {
+        toast.error(`דרושה בדיקה ידנית: ${r.reason}`);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה בזיהוי");
+      setDetectResult({ result: "manual_review", reason: "error" });
+    } finally {
+      setDetecting(false);
+    }
   };
 
   const validateRss = async (): Promise<{ valid: boolean; reason?: string; status?: SourceStatus }> => {
@@ -330,7 +371,24 @@ export const SourceManager = ({ onRunSource }: { onRunSource: (sourceId: string)
               </div>
             </Field>
             <Field label="Base URL" full>
-              <Input dir="ltr" value={form.url ?? ""} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://..." maxLength={500} />
+              <div className="flex gap-2">
+                <Input dir="ltr" value={form.url ?? ""} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://..." maxLength={500} />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={detectRss}
+                  disabled={detecting || (!form.url && !form.rss_url)}
+                  className="gap-1.5 shrink-0"
+                  title="זהה RSS אוטומטית מתוך הדומיין"
+                >
+                  {detecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                  זהה RSS
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                בודק את ה-URL כפי שהוא, מסלולי RSS נפוצים, וקישורי alternate בעמוד. עוזר אך לא מובטח.
+              </p>
             </Field>
             <Field label="RSS URL" full>
               <div className="flex gap-2">
@@ -339,6 +397,7 @@ export const SourceManager = ({ onRunSource }: { onRunSource: (sourceId: string)
                   {validating ? <Loader2 className="h-4 w-4 animate-spin" /> : "בדוק"}
                 </Button>
               </div>
+              {detectResult && <DetectBanner r={detectResult} />}
             </Field>
             <Field label="הערות" full>
               <Textarea value={form.notes ?? ""} onChange={(e) => setForm({ ...form, notes: e.target.value })} maxLength={2000} rows={3} />
@@ -445,5 +504,54 @@ const StatusBadge = ({ status }: { status: SourceStatus }) => {
     <Badge className={cn("text-xs gap-1", m.cls)}>
       {m.icon}{m.label}
     </Badge>
+  );
+};
+
+const labelVia = (via: "input" | "pattern" | "alternate") =>
+  via === "input" ? "URL ישיר" : via === "pattern" ? "מסלול נפוץ" : "קישור alternate בעמוד";
+
+const DetectBanner = ({ r }: { r: DetectResult }) => {
+  if (r.result === "valid") {
+    return (
+      <div className="mt-2 p-2.5 rounded-md border border-green-500/30 bg-green-500/10 text-xs flex items-start gap-2">
+        <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+        <div className="min-w-0">
+          <div className="font-medium text-green-700">נמצא RSS תקין · {r.item_count} פריטים · {labelVia(r.via)}</div>
+          <div className="text-muted-foreground truncate" dir="ltr">{r.rss_url}</div>
+        </div>
+      </div>
+    );
+  }
+  if (r.result === "invalid") {
+    return (
+      <div className="mt-2 p-2.5 rounded-md border border-destructive/30 bg-destructive/10 text-xs flex items-start gap-2">
+        <XCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+        <div className="min-w-0">
+          <div className="font-medium text-destructive">ה-URL הגיב אך אינו feed תקין</div>
+          <div className="text-muted-foreground">סיבה: {r.reason}</div>
+        </div>
+      </div>
+    );
+  }
+  if (r.result === "not_found") {
+    const tried = r.tried?.length ?? 0;
+    return (
+      <div className="mt-2 p-2.5 rounded-md border border-amber-500/30 bg-amber-500/10 text-xs flex items-start gap-2">
+        <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+        <div>
+          <div className="font-medium text-amber-700">לא נמצא RSS אוטומטית</div>
+          <div className="text-muted-foreground">נוסו {tried} כתובות. אפשר להזין RSS URL ישירות ולבדוק.</div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-2 p-2.5 rounded-md border border-muted bg-muted/30 text-xs flex items-start gap-2">
+      <HelpCircle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+      <div>
+        <div className="font-medium">דרושה בדיקה ידנית</div>
+        <div className="text-muted-foreground">{r.reason}</div>
+      </div>
+    </div>
   );
 };
