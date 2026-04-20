@@ -9,6 +9,7 @@ import { useSources, useItems } from "@/hooks/useIntelligence";
 import { toast } from "sonner";
 import { formatHeRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { SourceManager } from "@/components/SourceManager";
 
 interface IngestionRun {
   id: string;
