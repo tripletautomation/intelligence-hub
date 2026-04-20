@@ -27,13 +27,46 @@ const filters: { id: Filter; label: string }[] = [
 ];
 
 const Dashboard = () => {
-  const { data: items = [] } = useItems();
+  const qc = useQueryClient();
+  const { data: items = [], dataUpdatedAt, refetch: refetchItems } = useItems();
   const { data: sources = [] } = useSources();
   const { data: actions } = useUserActions();
+  const { data: isAdmin = false } = useIsAdmin();
   const log = useLogAction();
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [openItem, setOpenItem] = useState<Item | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const lastUpdatedIso = useMemo(() => {
+    const ts = items
+      .map((i) => i.published_at)
+      .filter(Boolean)
+      .map((d) => new Date(d as string).getTime());
+    const max = ts.length ? Math.max(...ts) : dataUpdatedAt;
+    return max ? new Date(max).toISOString() : null;
+  }, [items, dataUpdatedAt]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("ingest-rss", { body: { max_items: 10 } });
+      if (error) throw error;
+      const totalInserted = ((data as any)?.results ?? []).reduce(
+        (s: number, r: any) => s + (r.inserted ?? 0),
+        0,
+      );
+      await Promise.all([
+        refetchItems(),
+        qc.invalidateQueries({ queryKey: ["ingestion_runs"] }),
+      ]);
+      toast.success(totalInserted > 0 ? `נוספו ${totalInserted} פריטים חדשים` : "אין פריטים חדשים");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה ברענון");
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const states = useMemo(() => deriveItemStates(actions), [actions]);
   const sourcesById = useMemo(() => new Map(sources.map((s) => [s.id, s])), [sources]);
