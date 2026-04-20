@@ -205,10 +205,10 @@ const Admin = () => {
 };
 
 const LogsMonitoringSection = ({
-  newsRuns, researchRuns,
-}: { newsRuns: IngestionRun[]; researchRuns: IngestionRun[] }) => {
+  newsRuns, researchRuns, pageEventRuns,
+}: { newsRuns: IngestionRun[]; researchRuns: IngestionRun[]; pageEventRuns: IngestionRun[] }) => {
   const [open, setOpen] = useState(false);
-  const allRuns = [...newsRuns, ...researchRuns].sort(
+  const allRuns = [...newsRuns, ...researchRuns, ...pageEventRuns].sort(
     (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime(),
   );
   const last = allRuns[0];
