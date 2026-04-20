@@ -253,6 +253,7 @@ const LogsMonitoringSection = ({
       <CollapsibleContent className="px-4 pb-4 pt-0 space-y-4">
         <RunsLogCard title="לוג ריצות — News" runs={newsRuns} />
         <RunsLogCard title="לוג ריצות — Research" runs={researchRuns} />
+        <RunsLogCard title="לוג ריצות — Page Events" runs={pageEventRuns} />
       </CollapsibleContent>
     </Collapsible>
   );
