@@ -212,14 +212,14 @@ async function ingestPageSource(source: {
   let fetched = 0, inserted = 0, skipped = 0;
 
   try {
-    const md = await firecrawlScrape(source.url);
+    const { markdown: md, resolvedUrl } = await firecrawlScrape(source.url);
     const debug: { raw?: string; mdLen?: number; finishReason?: string; rawArgs?: string } = {};
-    const events = await extractEvents(source.url, md, debug);
+    const events = await extractEvents(resolvedUrl, md, debug);
     fetched = events.length;
     if (events.length === 0) {
       errors.push({
         stage: "ai-empty",
-        url: source.url,
+        url: resolvedUrl,
         message: `No events extracted. md_len=${debug.mdLen} finish=${debug.finishReason} raw=${debug.raw ?? ""} args=${debug.rawArgs ?? ""}`,
       });
     }
