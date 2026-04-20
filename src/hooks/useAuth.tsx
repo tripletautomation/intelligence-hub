@@ -7,7 +7,11 @@ interface AuthCtx {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: string | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    firstName: string,
+  ) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -19,6 +23,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Set listener BEFORE getSession to avoid missed events
     const { data: sub } = supabase.auth.onAuthStateChange((_evt, s) => {
       setSession(s);
       setUser(s?.user ?? null);
@@ -36,9 +41,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return { error: error?.message ?? null };
   };
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, firstName: string) => {
     const redirectTo = `${window.location.origin}/`;
-    const { error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: redirectTo } });
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: redirectTo,
+        data: { first_name: firstName.trim() },
+      },
+    });
     return { error: error?.message ?? null };
   };
 
@@ -46,7 +58,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await supabase.auth.signOut();
   };
 
-  return <Ctx.Provider value={{ user, session, loading, signIn, signUp, signOut }}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={{ user, session, loading, signIn, signUp, signOut }}>
+      {children}
+    </Ctx.Provider>
+  );
 };
 
 export const useAuth = () => {

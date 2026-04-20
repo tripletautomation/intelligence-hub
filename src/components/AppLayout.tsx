@@ -1,9 +1,10 @@
 import { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { LogOut, Search, User } from "lucide-react";
+import { LogOut, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -22,6 +23,8 @@ const tabs = [
 
 export const AppLayout = ({ children, search, onSearchChange }: Props) => {
   const { user, signOut } = useAuth();
+  const { data: profile } = useProfile();
+  const greetingName = profile?.first_name?.trim() || user?.email?.split("@")[0] || "";
   const nav = useNavigate();
 
   return (
@@ -44,10 +47,11 @@ export const AppLayout = ({ children, search, onSearchChange }: Props) => {
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
-              <User className="h-4 w-4" />
-              <span dir="ltr">{user?.email}</span>
-            </div>
+            {greetingName && (
+              <div className="hidden sm:block text-sm text-muted-foreground">
+                שלום, <span className="text-foreground font-medium">{greetingName}</span>
+              </div>
+            )}
             <Button
               variant="ghost"
               size="sm"

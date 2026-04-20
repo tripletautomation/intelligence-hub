@@ -4,12 +4,14 @@ import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { useSources, useItems } from "@/hooks/useIntelligence";
 import { toast } from "sonner";
 import { formatHeRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { SourceManager } from "@/components/SourceManager";
+import { ChevronDown, AlertTriangle, Activity } from "lucide-react";
 
 interface IngestionRun {
   id: string;
@@ -156,10 +158,63 @@ const Admin = () => {
           </div>
         </div>
 
-        <RunsLogCard title="לוג ריצות — News" runs={newsRuns} />
-        <RunsLogCard title="לוג ריצות — Research" runs={researchRuns} />
+        <LogsMonitoringSection newsRuns={newsRuns} researchRuns={researchRuns} />
       </div>
     </AppLayout>
+  );
+};
+
+const LogsMonitoringSection = ({
+  newsRuns, researchRuns,
+}: { newsRuns: IngestionRun[]; researchRuns: IngestionRun[] }) => {
+  const [open, setOpen] = useState(false);
+  const allRuns = [...newsRuns, ...researchRuns].sort(
+    (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime(),
+  );
+  const last = allRuns[0];
+  const errorCount = last?.errors_json?.length ?? 0;
+  const hasErrors = errorCount > 0 || (last && last.status !== "success" && last.status !== "running");
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className={cn(
+      "surface-card",
+      hasErrors && "border-destructive/40",
+    )}>
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="w-full p-4 flex items-center justify-between gap-4 text-start hover:bg-muted/30 transition-colors rounded-[inherit]"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            {hasErrors ? (
+              <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+            ) : (
+              <Activity className="h-4 w-4 text-muted-foreground shrink-0" />
+            )}
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-primary">Logs & Monitoring</div>
+              {last ? (
+                <div className="text-xs text-muted-foreground truncate">
+                  ריצה אחרונה: <span className="text-foreground">{last.status}</span>
+                  {" · "}
+                  {formatHeRelative(last.started_at)}
+                  {errorCount > 0 && (
+                    <> {" · "}<span className="text-destructive">{errorCount} שגיאות</span></>
+                  )}
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground">אין ריצות עדיין</div>
+              )}
+            </div>
+          </div>
+          <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform shrink-0", open && "rotate-180")} />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="px-4 pb-4 pt-0 space-y-4">
+        <RunsLogCard title="לוג ריצות — News" runs={newsRuns} />
+        <RunsLogCard title="לוג ריצות — Research" runs={researchRuns} />
+      </CollapsibleContent>
+    </Collapsible>
   );
 };
 
