@@ -23,6 +23,8 @@ const tabs = [
 
 export const AppLayout = ({ children, search, onSearchChange }: Props) => {
   const { user, signOut } = useAuth();
+  const { data: profile } = useProfile();
+  const greetingName = profile?.first_name?.trim() || user?.email?.split("@")[0] || "";
   const nav = useNavigate();
 
   return (
