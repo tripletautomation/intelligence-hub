@@ -10,6 +10,7 @@ const Auth = () => {
   const { user, loading, signIn, signUp } = useAuth();
   const nav = useNavigate();
   const [mode, setMode] = useState<"in" | "up">("in");
+  const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -18,8 +19,15 @@ const Auth = () => {
 
   const handle = async (e: FormEvent) => {
     e.preventDefault();
+    if (mode === "up" && firstName.trim().length < 1) {
+      toast.error("נא להזין שם פרטי");
+      return;
+    }
     setBusy(true);
-    const { error } = mode === "in" ? await signIn(email, password) : await signUp(email, password);
+    const { error } =
+      mode === "in"
+        ? await signIn(email, password)
+        : await signUp(email, password, firstName);
     setBusy(false);
     if (error) {
       toast.error(error);
@@ -40,13 +48,44 @@ const Auth = () => {
           </p>
         </div>
         <form onSubmit={handle} className="space-y-4">
+          {mode === "up" && (
+            <div className="space-y-2">
+              <Label htmlFor="first_name">שם פרטי</Label>
+              <Input
+                id="first_name"
+                type="text"
+                required
+                maxLength={60}
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="לדוגמה: שפיר"
+              />
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="email">דוא״ל</Label>
-            <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} dir="ltr" className="text-start" />
+            <Input
+              id="email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              dir="ltr"
+              className="text-start"
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="pw">סיסמה</Label>
-            <Input id="pw" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} dir="ltr" className="text-start" />
+            <Input
+              id="pw"
+              type="password"
+              required
+              minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              dir="ltr"
+              className="text-start"
+            />
           </div>
           <Button type="submit" className="w-full" disabled={busy}>
             {busy ? "..." : mode === "in" ? "התחברות" : "יצירת חשבון"}
