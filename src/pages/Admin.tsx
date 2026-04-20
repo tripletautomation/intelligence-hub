@@ -181,7 +181,24 @@ const Admin = () => {
           </div>
         </div>
 
-        <LogsMonitoringSection newsRuns={newsRuns} researchRuns={researchRuns} />
+        <div className="surface-card p-6">
+          <div className="flex items-center justify-between mb-2 gap-4 flex-wrap">
+            <div>
+              <h2 className="text-lg font-bold text-primary">הרצת Page Events ידנית</h2>
+              <p className="text-sm text-muted-foreground">
+                סורק עמודי אירועים (ללא RSS) דרך Firecrawl ומחלץ אירועים מובנים עם AI. נשמרים כ-<code className="text-xs">item_type=event</code>.
+              </p>
+            </div>
+            <Button onClick={runPageEventsIngestion} disabled={runningPageEvents || pageEventSources.length === 0} variant="secondary">
+              {runningPageEvents ? "רץ..." : "הרץ Page Events"}
+            </Button>
+          </div>
+          <div className="text-xs text-muted-foreground mt-2" dir="ltr">
+            Sources: {pageEventSources.length === 0 ? "none configured" : pageEventSources.map((s: any) => s.display_name ?? s.name).join(" · ")} · Firecrawl + Lovable AI · Manual only
+          </div>
+        </div>
+
+        <LogsMonitoringSection newsRuns={newsRuns} researchRuns={researchRuns} pageEventRuns={pageEventRuns} />
       </div>
     </AppLayout>
   );
