@@ -1,8 +1,15 @@
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/AppLayout";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDrawer } from "@/components/ItemDrawer";
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-react";
 import { useItems, useSources, useUserActions, useLogAction, deriveItemStates } from "@/hooks/useIntelligence";
+import { useIsAdmin } from "@/hooks/useAdmin";
+import { supabase } from "@/integrations/supabase/client";
+import { formatHeRelative } from "@/lib/format";
+import { toast } from "sonner";
 import type { Item, ActionType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -20,13 +27,46 @@ const filters: { id: Filter; label: string }[] = [
 ];
 
 const Dashboard = () => {
-  const { data: items = [] } = useItems();
+  const qc = useQueryClient();
+  const { data: items = [], dataUpdatedAt, refetch: refetchItems } = useItems();
   const { data: sources = [] } = useSources();
   const { data: actions } = useUserActions();
+  const { data: isAdmin = false } = useIsAdmin();
   const log = useLogAction();
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [openItem, setOpenItem] = useState<Item | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const lastUpdatedIso = useMemo(() => {
+    const ts = items
+      .map((i) => i.published_at)
+      .filter(Boolean)
+      .map((d) => new Date(d as string).getTime());
+    const max = ts.length ? Math.max(...ts) : dataUpdatedAt;
+    return max ? new Date(max).toISOString() : null;
+  }, [items, dataUpdatedAt]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("ingest-rss", { body: { max_items: 10 } });
+      if (error) throw error;
+      const totalInserted = ((data as any)?.results ?? []).reduce(
+        (s: number, r: any) => s + (r.inserted ?? 0),
+        0,
+      );
+      await Promise.all([
+        refetchItems(),
+        qc.invalidateQueries({ queryKey: ["ingestion_runs"] }),
+      ]);
+      toast.success(totalInserted > 0 ? `נוספו ${totalInserted} פריטים חדשים` : "אין פריטים חדשים");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה ברענון");
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const states = useMemo(() => deriveItemStates(actions), [actions]);
   const sourcesById = useMemo(() => new Map(sources.map((s) => [s.id, s])), [sources]);
@@ -72,6 +112,26 @@ const Dashboard = () => {
 
   return (
     <AppLayout search={search} onSearchChange={setSearch}>
+      <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
+        <div className="text-xs text-muted-foreground">
+          {refreshing ? (
+            <span className="inline-flex items-center gap-1.5 text-foreground">
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" /> מרענן עכשיו...
+            </span>
+          ) : lastUpdatedIso ? (
+            <>עודכן לאחרונה <span className="text-foreground font-medium">{formatHeRelative(lastUpdatedIso)}</span></>
+          ) : (
+            "טרם עודכן"
+          )}
+        </div>
+        {isAdmin && (
+          <Button size="sm" variant="outline" onClick={handleRefresh} disabled={refreshing} className="gap-1.5">
+            <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+            {refreshing ? "מרענן..." : "רענן עכשיו"}
+          </Button>
+        )}
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <KpiCard label="פריטים חדשים היום" value={kpi.newToday} />
         <KpiCard label="לא נקראו" value={kpi.unread} accent />
