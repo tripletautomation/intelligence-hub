@@ -132,7 +132,7 @@ const Admin = () => {
                       <StatusDot status={r.status} />
                       <div className="min-w-0">
                         <div className="text-sm font-medium truncate">{r.source_name ?? "—"}</div>
-                        <div className="text-xs text-muted-foreground">{formatRelative(r.started_at)}</div>
+                        <div className="text-xs text-muted-foreground">{formatHeRelative(r.started_at)}</div>
                       </div>
                     </div>
                     <div className="text-xs text-muted-foreground flex gap-4 shrink-0">
