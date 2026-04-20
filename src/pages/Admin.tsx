@@ -56,8 +56,9 @@ const Admin = () => {
     },
   });
 
-  const newsRuns = runs.filter((r) => r.triggered_by !== "manual-research").slice(0, 20);
+  const newsRuns = runs.filter((r) => r.triggered_by !== "manual-research" && r.triggered_by !== "manual-page-events").slice(0, 20);
   const researchRuns = runs.filter((r) => r.triggered_by === "manual-research").slice(0, 20);
+  const pageEventRuns = runs.filter((r) => r.triggered_by === "manual-page-events").slice(0, 20);
 
   const runIngestion = async (sourceId?: string) => {
     setRunning(true);
