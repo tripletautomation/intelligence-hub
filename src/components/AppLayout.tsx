@@ -17,6 +17,7 @@ const tabs = [
   { to: "/archive", label: "ארכיון" },
   { to: "/events", label: "אירועים" },
   { to: "/preferences", label: "העדפות" },
+  { to: "/admin", label: "ניהול" },
 ];
 
 export const AppLayout = ({ children, search, onSearchChange }: Props) => {

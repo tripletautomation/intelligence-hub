@@ -14,6 +14,56 @@ export type Database = {
   }
   public: {
     Tables: {
+      ingestion_runs: {
+        Row: {
+          errors_json: Json | null
+          fetched: number
+          finished_at: string | null
+          id: string
+          inserted: number
+          skipped: number
+          source_id: string | null
+          source_name: string | null
+          started_at: string
+          status: string
+          triggered_by: string
+        }
+        Insert: {
+          errors_json?: Json | null
+          fetched?: number
+          finished_at?: string | null
+          id?: string
+          inserted?: number
+          skipped?: number
+          source_id?: string | null
+          source_name?: string | null
+          started_at?: string
+          status?: string
+          triggered_by?: string
+        }
+        Update: {
+          errors_json?: Json | null
+          fetched?: number
+          finished_at?: string | null
+          id?: string
+          inserted?: number
+          skipped?: number
+          source_id?: string | null
+          source_name?: string | null
+          started_at?: string
+          status?: string
+          triggered_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ingestion_runs_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       items: {
         Row: {
           created_at: string
@@ -23,6 +73,7 @@ export type Database = {
           event_register_url: string | null
           id: string
           is_featured: boolean
+          is_seed: boolean
           item_type: string
           published_at: string | null
           region: string | null
@@ -46,6 +97,7 @@ export type Database = {
           event_register_url?: string | null
           id?: string
           is_featured?: boolean
+          is_seed?: boolean
           item_type?: string
           published_at?: string | null
           region?: string | null
@@ -69,6 +121,7 @@ export type Database = {
           event_register_url?: string | null
           id?: string
           is_featured?: boolean
+          is_seed?: boolean
           item_type?: string
           published_at?: string | null
           region?: string | null
@@ -100,9 +153,11 @@ export type Database = {
           category: string | null
           created_at: string
           id: string
+          is_seed: boolean
           name: string
           priority: number
           region: string | null
+          rss_url: string | null
           type: string | null
           updated_at: string
           url: string | null
@@ -112,9 +167,11 @@ export type Database = {
           category?: string | null
           created_at?: string
           id?: string
+          is_seed?: boolean
           name: string
           priority?: number
           region?: string | null
+          rss_url?: string | null
           type?: string | null
           updated_at?: string
           url?: string | null
@@ -124,9 +181,11 @@ export type Database = {
           category?: string | null
           created_at?: string
           id?: string
+          is_seed?: boolean
           name?: string
           priority?: number
           region?: string | null
+          rss_url?: string | null
           type?: string | null
           updated_at?: string
           url?: string | null
