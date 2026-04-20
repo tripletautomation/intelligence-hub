@@ -83,10 +83,10 @@ function parseRss(xml: string): ParsedEntry[] {
 
 async function classifyAndEnrich(entry: ParsedEntry): Promise<ResearchEnriched | null> {
   const sys =
-    "You are a strict research classifier for an Israeli data-center intelligence platform. " +
-    "Mark is_research=TRUE ONLY for substantive research content: whitepapers, industry reports, market studies, surveys, in-depth multi-page analyses, or research-backed forecasts. " +
-    "Mark is_research=FALSE for: news articles, product launches, company announcements, opinion pieces, short blog posts, event coverage, interviews. " +
-    "Be strict — when in doubt, mark FALSE. " +
+    "You are a research classifier for an Israeli data-center intelligence platform. " +
+    "Mark is_research=TRUE for substantive research-style content, including: whitepapers, industry reports, market studies, surveys, in-depth multi-page analyses, research-backed forecasts, market outlooks, sector insights, special reports, market-trends pieces, and analyst briefings. " +
+    "Mark is_research=FALSE for: short news updates, product launches, company announcements, opinion/op-eds, single-quote interviews, event coverage, listicles, sponsored posts. " +
+    "If the piece presents data, multi-source analysis, forecasts, or structured market trends — lean TRUE. If it is a single news event or PR — FALSE. " +
     "If is_research=TRUE, also produce a Hebrew translation, summary, why-it-matters, region, tags, and relevance score (0-100) for Israeli data-center professionals.";
   const user = `Article:
 Title: ${entry.title}
@@ -114,8 +114,8 @@ URL: ${entry.link}`;
             parameters: {
               type: "object",
               properties: {
-                is_research: { type: "boolean", description: "TRUE only for whitepapers/reports/studies/in-depth analyses. Strict." },
-                research_type: { type: "string", enum: ["whitepaper", "report", "study", "analysis", "survey", "other"] },
+                is_research: { type: "boolean", description: "TRUE for whitepapers/reports/studies/analyses/outlooks/insights/special reports/market trends." },
+                research_type: { type: "string", enum: ["whitepaper", "report", "study", "analysis", "outlook", "insight", "special_report", "market_trends", "survey", "other"] },
                 title_he: { type: "string" },
                 summary_he: { type: "string", description: "Hebrew, max 2 sentences" },
                 why_it_matters: { type: "string", description: "Hebrew, 1 sentence, Israeli data-center perspective" },
