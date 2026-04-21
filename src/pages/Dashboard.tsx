@@ -75,6 +75,8 @@ const Dashboard = () => {
     const q = search.trim().toLowerCase();
     return items.filter((it) => {
       const st = states.get(it.id) ?? { read: false, saved: false, liked: false, disliked: false };
+      // Hide off-topic / low-relevance items (not related to data centers / computing / tech)
+      if ((it.relevance_score ?? 0) < 30) return false;
       if (filter === "israel" && it.region !== "israel") return false;
       if (filter === "global" && it.region !== "global") return false;
       if (filter === "events" && it.item_type !== "event") return false;
