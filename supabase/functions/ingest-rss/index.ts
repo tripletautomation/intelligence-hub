@@ -36,6 +36,7 @@ interface Enriched {
   region: "israel" | "global";
   topic_tags: string[];
   relevance_score: number;
+  is_relevant: boolean;
 }
 
 // ---------- helpers ----------
@@ -91,7 +92,7 @@ function classify(title: string, url: string): "news" | "event" | "research" | "
 
 async function enrich(entry: ParsedEntry, sourceRegion: string): Promise<Enriched | null> {
   const sys =
-    "You are an analyst for an Israeli data-center industry intelligence platform. Translate and summarize the article in Hebrew, classify region, extract topic tags, and rate relevance to Israeli data-center professionals (cooling, power, AI infra, sustainability, M&A, hyperscalers, telecom, regulation).";
+    "You are an analyst for an Israeli data-center industry intelligence platform. The platform covers ONLY: data centers, cloud/hyperscalers, computing infrastructure, networking/telecom infra, AI infrastructure, cooling, power, sustainability for IT, semiconductors, enterprise IT, cybersecurity for infra, and related M&A/regulation. Set is_relevant=false for anything off-topic (general business, consumer products, politics, sports, entertainment, generic SaaS news, mobile apps, gaming, crypto price moves, lifestyle tech). When is_relevant=false, set relevance_score below 30. Translate and summarize in Hebrew either way.";
   const user = `Article:
 Title: ${entry.title}
 Description: ${entry.description.slice(0, 1500)}
@@ -125,8 +126,9 @@ Source region hint: ${sourceRegion}`;
                 region: { type: "string", enum: ["israel", "global"] },
                 topic_tags: { type: "array", items: { type: "string" }, description: "3-6 lowercase English tags" },
                 relevance_score: { type: "integer", minimum: 0, maximum: 100 },
+                is_relevant: { type: "boolean", description: "True only if the article is about data centers, computing/IT infrastructure, or directly related technology. False for unrelated topics." },
               },
-              required: ["title_he", "summary_he", "why_it_matters", "region", "topic_tags", "relevance_score"],
+              required: ["title_he", "summary_he", "why_it_matters", "region", "topic_tags", "relevance_score", "is_relevant"],
               additionalProperties: false,
             },
           },
