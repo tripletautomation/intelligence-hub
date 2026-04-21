@@ -25,6 +25,7 @@ const Archive = () => {
     const q = search.trim().toLowerCase();
     return items.filter((it) => {
       const st = states.get(it.id) ?? { read: false, saved: false, liked: false, disliked: false };
+      if ((it.relevance_score ?? 0) < 30) return false;
       if (region !== "all" && it.region !== region) return false;
       if (type !== "all" && it.item_type !== type) return false;
       if (sourceId !== "all" && it.source_id !== sourceId) return false;
