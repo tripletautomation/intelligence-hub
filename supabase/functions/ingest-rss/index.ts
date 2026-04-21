@@ -206,6 +206,12 @@ async function ingestSource(source: {
           continue;
         }
 
+        // Skip off-topic articles (not related to data centers / computing / tech infrastructure)
+        if (enriched.is_relevant === false || enriched.relevance_score < 30) {
+          skipped++;
+          continue;
+        }
+
         const itemType = classify(entry.title, entry.link);
         const publishedAt = entry.pubDate ? new Date(entry.pubDate).toISOString() : null;
 
