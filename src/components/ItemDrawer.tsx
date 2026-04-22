@@ -4,8 +4,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { RegionBadge } from "./RegionBadge";
 import { formatHeDateTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-import { Bookmark, BookmarkCheck, ExternalLink, ThumbsDown, ThumbsUp, Check, MapPin, Calendar, Eye } from "lucide-react";
+import { Bookmark, BookmarkCheck, ExternalLink, ThumbsDown, ThumbsUp, Check, MapPin, Calendar, Eye, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { buildMailtoUrl } from "@/lib/mailto";
 
 interface Props {
   item: Item | null;
@@ -88,6 +89,24 @@ export const ItemDrawer = ({ item, source, state, open, onOpenChange, onAction }
                 </a>
               </Button>
             )}
+            <Button variant="ghost" size="sm" asChild>
+              <a
+                href={buildMailtoUrl({
+                  kind: item.item_type === "event" ? "event" : "article",
+                  title: item.title_he,
+                  date: item.item_type === "event" ? item.event_date : item.published_at,
+                  location: item.event_location,
+                  isOnline: item.event_is_online,
+                  summary: item.summary_he,
+                  whyItMatters: item.why_it_matters,
+                  url: item.url,
+                  sourceName: source?.name,
+                })}
+                className="gap-1.5"
+              >
+                <Mail className="h-3.5 w-3.5" /> שלח במייל
+              </a>
+            </Button>
             {!state.read && (
               <Button variant="ghost" size="sm" onClick={() => onAction("mark_read")} className="gap-1.5">
                 <Check className="h-3.5 w-3.5" /> סמן כנקרא
