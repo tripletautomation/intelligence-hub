@@ -64,8 +64,8 @@ async function firecrawlScrape(url: string): Promise<{ markdown: string; resolve
         url: candidate,
         formats: ["markdown"],
         onlyMainContent: true,
-        waitFor: 8000,
-        timeout: 60000,
+        waitFor: 2500,
+        timeout: 25000,
         proxy: "stealth",
         blockAds: true,
       }),
@@ -121,7 +121,7 @@ async function extractEvents(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-pro",
+      model: "google/gemini-2.5-flash",
       messages: [
         { role: "system", content: sys },
         { role: "user", content: user },
