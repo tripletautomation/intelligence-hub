@@ -2,20 +2,24 @@ import { useMemo, useState } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDrawer } from "@/components/ItemDrawer";
-import { useItems, useSources, useUserActions, useLogAction, deriveItemStates } from "@/hooks/useIntelligence";
+import { useItems, useSources, useUserActions, useLogAction, deriveItemStates, usePreferences, useHideItem } from "@/hooks/useIntelligence";
 import type { Item, ActionType } from "@/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
 
 const Archive = () => {
   const { data: items = [] } = useItems();
   const { data: sources = [] } = useSources();
   const { data: actions } = useUserActions();
+  const { data: prefs } = usePreferences();
+  const hideItem = useHideItem();
   const log = useLogAction();
   const [search, setSearch] = useState("");
   const [region, setRegion] = useState<string>("all");
   const [type, setType] = useState<string>("all");
   const [sourceId, setSourceId] = useState<string>("all");
   const [readState, setReadState] = useState<string>("all");
+  const [view, setView] = useState<"deleted" | "all">("deleted");
   const [openItem, setOpenItem] = useState<Item | null>(null);
 
   const states = useMemo(() => deriveItemStates(actions), [actions]);
@@ -23,9 +27,11 @@ const Archive = () => {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const hiddenSet = new Set(prefs?.hidden_item_ids ?? []);
     return items.filter((it) => {
       const st = states.get(it.id) ?? { read: false, saved: false, liked: false, disliked: false };
       if ((it.relevance_score ?? 0) < 30) return false;
+      if (view === "deleted" && !hiddenSet.has(it.id)) return false;
       if (region !== "all" && it.region !== region) return false;
       if (type !== "all" && it.item_type !== type) return false;
       if (sourceId !== "all" && it.source_id !== sourceId) return false;
@@ -38,7 +44,9 @@ const Archive = () => {
       }
       return true;
     });
-  }, [items, states, search, region, type, sourceId, readState]);
+  }, [items, states, search, region, type, sourceId, readState, view, prefs?.hidden_item_ids]);
+
+  const hiddenSet = useMemo(() => new Set(prefs?.hidden_item_ids ?? []), [prefs?.hidden_item_ids]);
 
   const openState = openItem
     ? states.get(openItem.id) ?? { read: false, saved: false, liked: false, disliked: false }
