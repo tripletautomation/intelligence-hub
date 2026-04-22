@@ -4,11 +4,12 @@ import { useItems, useSources } from "@/hooks/useIntelligence";
 import { formatHeDateTime } from "@/lib/format";
 import { RegionBadge } from "@/components/RegionBadge";
 import { Button } from "@/components/ui/button";
-import { Calendar, MapPin, ExternalLink, Clock } from "lucide-react";
+import { Calendar, MapPin, ExternalLink, Clock, Mail } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { SavedDiscoveriesSection } from "@/components/events/SavedDiscoveriesSection";
 import { cn } from "@/lib/utils";
 import type { Item, Source } from "@/lib/types";
+import { buildMailtoUrl } from "@/lib/mailto";
 
 type Bucket = "this_month" | "next_month" | "past";
 
@@ -223,6 +224,24 @@ const EventCard = ({ ev, source, isPast }: { ev: Item; source?: Source; isPast?:
         </a>
       </Button>
     )}
+    <Button asChild size="sm" variant="ghost" className="ml-2">
+      <a
+        href={buildMailtoUrl({
+          kind: "event",
+          title: ev.title_he,
+          date: ev.event_date,
+          location: ev.event_location,
+          isOnline: ev.event_is_online,
+          summary: ev.summary_he,
+          whyItMatters: ev.why_it_matters,
+          url: ev.event_register_url ?? ev.url,
+          sourceName: source?.name,
+        })}
+        className="gap-1.5"
+      >
+        <Mail className="h-3.5 w-3.5" /> שלח במייל
+      </a>
+    </Button>
   </article>
 );
 
