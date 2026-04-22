@@ -113,7 +113,7 @@ const Discover = () => {
       setResults(data.events ?? []);
       setLastQuery(data.query ?? query);
       if (!data.events?.length) {
-        toast({ title: "לא נמצאו אירועים", description: "נסי לנסח מחדש או לשנות פילטרים." });
+        toast({ title: "לא נמצאו אירועים", description: "נסה לנסח מחדש או לשנות פילטרים." });
       }
     },
     onError: (e: Error) => {
@@ -149,7 +149,7 @@ const Discover = () => {
 
   const onSearch = () => {
     if (query.trim().length < 2) {
-      toast({ title: "נדרשת שאילתה", description: "כתבי מה את מחפשת.", variant: "destructive" });
+      toast({ title: "נדרשת שאילתה", description: "כתוב מה אתה מחפש.", variant: "destructive" });
       return;
     }
     search.mutate();
@@ -165,7 +165,7 @@ const Discover = () => {
           </div>
           <h1 className="text-2xl md:text-3xl font-bold text-primary mb-1">חיפוש אירועים בעולם</h1>
           <p className="text-sm text-muted-foreground mb-6">
-            גלי כנסים, וובינרים ופאנלים מעבר למקורות הקבועים — מופעל ע״י Firecrawl + AI.
+            גלה כנסים, וובינרים ופאנלים מעבר למקורות הקבועים — מופעל ע״י Firecrawl + AI.
           </p>
 
           <div className="relative">
@@ -182,7 +182,7 @@ const Discover = () => {
               disabled={search.isPending}
               className="absolute left-2 top-1/2 -translate-y-1/2 h-10"
             >
-              {search.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "חפשי"}
+              {search.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "חפש"}
             </Button>
           </div>
 
@@ -227,13 +227,13 @@ const Discover = () => {
 
           {!search.isPending && results.length === 0 && lastQuery && (
             <div className="text-center py-16 text-muted-foreground text-sm">
-              לא נמצאו אירועים מתאימים. נסי לנסח מחדש.
+              לא נמצאו אירועים מתאימים. נסה לנסח מחדש.
             </div>
           )}
 
           {!search.isPending && results.length === 0 && !lastQuery && (
             <div className="text-center py-16 text-muted-foreground text-sm">
-              התחילי עם חיפוש או בחרי דוגמה למעלה.
+              התחל עם חיפוש או בחר דוגמה מלמעלה.
             </div>
           )}
 
@@ -292,7 +292,7 @@ const ResultCard = ({
           </a>
         </Button>
         <Button size="sm" variant="outline" onClick={onSave} disabled={isSaved} className="gap-1.5">
-          {isSaved ? <><BookmarkCheck className="h-3.5 w-3.5" /> נשמר</> : <><Bookmark className="h-3.5 w-3.5" /> שמרי</>}
+          {isSaved ? <><BookmarkCheck className="h-3.5 w-3.5" /> נשמר</> : <><Bookmark className="h-3.5 w-3.5" /> שמור</>}
         </Button>
         <Button asChild size="sm" variant="ghost" className="gap-1.5">
           <a href={toGoogleCalendarUrl(ev)} target="_blank" rel="noreferrer">
@@ -301,7 +301,7 @@ const ResultCard = ({
         </Button>
         <Button asChild size="sm" variant="ghost" className="gap-1.5">
           <a href={toMailtoUrl(ev)}>
-            <Mail className="h-3.5 w-3.5" /> שלחי במייל
+            <Mail className="h-3.5 w-3.5" /> שלח במייל
           </a>
         </Button>
       </div>
