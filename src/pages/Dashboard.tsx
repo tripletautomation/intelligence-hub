@@ -14,7 +14,7 @@ import type { Item, ActionType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 
-type Filter = "all" | "israel" | "global" | "events" | "research" | "unread" | "saved" | "liked";
+type Filter = "all" | "israel" | "global" | "events" | "research" | "unread" | "saved";
 
 const filters: { id: Filter; label: string }[] = [
   { id: "all", label: "הכל" },
@@ -24,7 +24,6 @@ const filters: { id: Filter; label: string }[] = [
   { id: "research", label: "מחקר" },
   { id: "unread", label: "לא נקראו" },
   { id: "saved", label: "שמורים" },
-  { id: "liked", label: "אהבתי" },
 ];
 
 const Dashboard = () => {
@@ -125,7 +124,6 @@ const Dashboard = () => {
       if (filter === "research" && it.item_type !== "research") return false;
       if (filter === "unread" && st.read) return false;
       if (filter === "saved" && !st.saved) return false;
-      if (filter === "liked" && !st.liked) return false;
       if (q) {
         const hay = `${it.title_he} ${it.summary_he ?? ""} ${it.tags_ai.join(" ")}`.toLowerCase();
         if (!hay.includes(q)) return false;
