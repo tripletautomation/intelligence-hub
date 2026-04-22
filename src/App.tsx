@@ -9,6 +9,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Archive from "./pages/Archive";
 import Events from "./pages/Events";
+import Discover from "./pages/Discover";
 import Preferences from "./pages/Preferences";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
@@ -27,6 +28,7 @@ const App = () => (
             <Route path="/" element={<RequireAuth><Dashboard /></RequireAuth>} />
             <Route path="/archive" element={<RequireAuth><Archive /></RequireAuth>} />
             <Route path="/events" element={<RequireAuth><Events /></RequireAuth>} />
+            <Route path="/discover" element={<RequireAuth><Discover /></RequireAuth>} />
             <Route path="/preferences" element={<RequireAuth><Preferences /></RequireAuth>} />
             <Route path="/admin" element={<RequireAuth><Admin /></RequireAuth>} />
             <Route path="*" element={<NotFound />} />
