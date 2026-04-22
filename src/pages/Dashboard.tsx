@@ -4,8 +4,8 @@ import { AppLayout } from "@/components/AppLayout";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDrawer } from "@/components/ItemDrawer";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Sparkles, X, FileText, Loader2 } from "lucide-react";
-import { useItems, useSources, useUserActions, useLogAction, deriveItemStates } from "@/hooks/useIntelligence";
+import { RefreshCw, Sparkles, X, FileText, Loader2, Trash2 } from "lucide-react";
+import { useItems, useSources, useUserActions, useLogAction, deriveItemStates, usePreferences, useHideItem } from "@/hooks/useIntelligence";
 
 import { supabase } from "@/integrations/supabase/client";
 import { formatHeRelative } from "@/lib/format";
@@ -33,7 +33,9 @@ const Dashboard = () => {
   const { data: items = [], dataUpdatedAt, refetch: refetchItems } = useItems();
   const { data: sources = [] } = useSources();
   const { data: actions } = useUserActions();
-  
+  const { data: prefs } = usePreferences();
+  const hideItem = useHideItem();
+
   const log = useLogAction();
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
@@ -41,6 +43,7 @@ const Dashboard = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showArchived, setShowArchived] = useState(false);
 
   const toggleSelected = (id: string) =>
     setSelectedIds((prev) => {
