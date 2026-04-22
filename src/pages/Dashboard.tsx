@@ -227,21 +227,11 @@ const Dashboard = () => {
               selectable={selectMode}
               selected={selectedIds.has(item.id)}
               onToggleSelected={() => toggleSelected(item.id)}
-              hidden={showArchived}
               onHide={() => {
                 hideItem.mutate(
                   { itemId: item.id, hide: true },
                   {
                     onSuccess: () => toast.success("הפריט הועבר לארכיון האישי"),
-                    onError: (e: Error) => toast.error(e.message),
-                  },
-                );
-              }}
-              onRestore={() => {
-                hideItem.mutate(
-                  { itemId: item.id, hide: false },
-                  {
-                    onSuccess: () => toast.success("הפריט שוחזר לפיד"),
                     onError: (e: Error) => toast.error(e.message),
                   },
                 );
