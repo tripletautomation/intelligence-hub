@@ -19,6 +19,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { buildMailtoUrl } from "@/lib/mailto";
 
 interface SavedRow {
   id: string;
@@ -64,15 +65,17 @@ function toGoogleCalendarUrl(ev: SavedRow) {
 }
 
 function toMailtoUrl(ev: SavedRow) {
-  const subject = encodeURIComponent(`אירוע: ${ev.title}`);
-  const body = encodeURIComponent(
-    `${ev.title}\n\n` +
-    `מתי: ${formatHeDate(ev.event_date)}\n` +
-    `איפה: ${ev.is_online ? "אונליין" : ev.location ?? "לא ידוע"}\n` +
-    `מקור: ${ev.source_name ?? ""}\n\n` +
-    `${ev.summary ?? ""}\n\nלמה זה חשוב:\n${ev.why_it_matters ?? ""}\n\nקישור: ${ev.source_url}`,
-  );
-  return `mailto:?subject=${subject}&body=${body}`;
+  return buildMailtoUrl({
+    kind: "event",
+    title: ev.title,
+    date: ev.event_date,
+    location: ev.location,
+    isOnline: ev.is_online,
+    summary: ev.summary,
+    whyItMatters: ev.why_it_matters,
+    url: ev.source_url,
+    sourceName: ev.source_name,
+  });
 }
 
 export const SavedDiscoveriesSection = () => {
