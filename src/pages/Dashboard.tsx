@@ -4,8 +4,8 @@ import { AppLayout } from "@/components/AppLayout";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDrawer } from "@/components/ItemDrawer";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Sparkles, X, FileText, Loader2 } from "lucide-react";
-import { useItems, useSources, useUserActions, useLogAction, deriveItemStates } from "@/hooks/useIntelligence";
+import { RefreshCw, Sparkles, X, FileText, Loader2, Trash2 } from "lucide-react";
+import { useItems, useSources, useUserActions, useLogAction, deriveItemStates, usePreferences, useHideItem } from "@/hooks/useIntelligence";
 
 import { supabase } from "@/integrations/supabase/client";
 import { formatHeRelative } from "@/lib/format";
@@ -33,7 +33,9 @@ const Dashboard = () => {
   const { data: items = [], dataUpdatedAt, refetch: refetchItems } = useItems();
   const { data: sources = [] } = useSources();
   const { data: actions } = useUserActions();
-  
+  const { data: prefs } = usePreferences();
+  const hideItem = useHideItem();
+
   const log = useLogAction();
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
@@ -41,6 +43,7 @@ const Dashboard = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showArchived, setShowArchived] = useState(false);
 
   const toggleSelected = (id: string) =>
     setSelectedIds((prev) => {
@@ -110,10 +113,17 @@ const Dashboard = () => {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const hiddenSet = new Set(prefs?.hidden_item_ids ?? []);
     return items.filter((it) => {
       const st = states.get(it.id) ?? { read: false, saved: false, liked: false, disliked: false };
       // Hide off-topic / low-relevance items (not related to data centers / computing / tech)
       if ((it.relevance_score ?? 0) < 30) return false;
+      const isHidden = hiddenSet.has(it.id);
+      if (showArchived) {
+        if (!isHidden) return false;
+      } else {
+        if (isHidden) return false;
+      }
       if (filter === "israel" && it.region !== "israel") return false;
       if (filter === "global" && it.region !== "global") return false;
       if (filter === "events" && it.item_type !== "event") return false;
@@ -127,7 +137,9 @@ const Dashboard = () => {
       }
       return true;
     });
-  }, [items, states, filter, search]);
+  }, [items, states, filter, search, prefs?.hidden_item_ids, showArchived]);
+
+  const hiddenCount = (prefs?.hidden_item_ids ?? []).length;
 
   const kpi = useMemo(() => {
     const today = new Date();
@@ -164,6 +176,15 @@ const Dashboard = () => {
           )}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            size="sm"
+            variant={showArchived ? "default" : "ghost"}
+            onClick={() => setShowArchived((v) => !v)}
+            className="gap-1.5"
+          >
+            <Trash2 className="h-4 w-4" />
+            {showArchived ? "חזרה לפיד" : `ארכיון אישי${hiddenCount ? ` (${hiddenCount})` : ""}`}
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => nav("/drafts")} className="gap-1.5">
             <FileText className="h-4 w-4" /> טיוטות מאמרים
           </Button>
@@ -222,6 +243,25 @@ const Dashboard = () => {
               selectable={selectMode}
               selected={selectedIds.has(item.id)}
               onToggleSelected={() => toggleSelected(item.id)}
+              hidden={showArchived}
+              onHide={() => {
+                hideItem.mutate(
+                  { itemId: item.id, hide: true },
+                  {
+                    onSuccess: () => toast.success("הפריט הועבר לארכיון האישי"),
+                    onError: (e: Error) => toast.error(e.message),
+                  },
+                );
+              }}
+              onRestore={() => {
+                hideItem.mutate(
+                  { itemId: item.id, hide: false },
+                  {
+                    onSuccess: () => toast.success("הפריט שוחזר לפיד"),
+                    onError: (e: Error) => toast.error(e.message),
+                  },
+                );
+              }}
             />
           ))
         )}

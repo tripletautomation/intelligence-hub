@@ -122,3 +122,28 @@ export const useSavePreferences = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["preferences"] }),
   });
 };
+
+/** Hide an item from the user's feed (soft-delete, reversible). */
+export const useHideItem = () => {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async ({ itemId, hide }: { itemId: string; hide: boolean }) => {
+      if (!user) throw new Error("not authenticated");
+      const { data: existing } = await supabase
+        .from("user_preferences")
+        .select("hidden_item_ids")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      const current: string[] = (existing?.hidden_item_ids as string[]) ?? [];
+      const next = hide
+        ? Array.from(new Set([...current, itemId]))
+        : current.filter((id) => id !== itemId);
+      const { error } = await supabase
+        .from("user_preferences")
+        .upsert({ user_id: user.id, hidden_item_ids: next }, { onConflict: "user_id" });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["preferences"] }),
+  });
+};

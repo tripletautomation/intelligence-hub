@@ -1,7 +1,7 @@
 import type { Item, Source, ItemUserState } from "@/lib/types";
 import { RegionBadge } from "./RegionBadge";
 import { formatHeRelative } from "@/lib/format";
-import { Bookmark, BookmarkCheck, ExternalLink, ThumbsDown, ThumbsUp, Check, Calendar, Mail } from "lucide-react";
+import { Bookmark, BookmarkCheck, ExternalLink, ThumbsDown, ThumbsUp, Check, Calendar, Mail, Trash2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -16,11 +16,15 @@ interface Props {
   selectable?: boolean;
   selected?: boolean;
   onToggleSelected?: () => void;
+  hidden?: boolean;
+  onHide?: () => void;
+  onRestore?: () => void;
 }
 
 export const ItemCard = ({
   item, source, state, onOpen, onAction,
   selectable, selected, onToggleSelected,
+  hidden, onHide, onRestore,
 }: Props) => {
   return (
     <article
@@ -143,6 +147,25 @@ export const ItemCard = ({
         >
           <ThumbsDown className="h-3.5 w-3.5" />
         </Button>
+        {hidden ? (
+          onRestore && (
+            <Button variant="ghost" size="sm" onClick={onRestore} className="gap-1.5 mr-auto">
+              <RotateCcw className="h-3.5 w-3.5" /> שחזר
+            </Button>
+          )
+        ) : (
+          onHide && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onHide}
+              className="gap-1.5 mr-auto text-muted-foreground hover:text-destructive"
+              title="העבר לארכיון אישי"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> מחק
+            </Button>
+          )
+        )}
       </div>
     </article>
   );
