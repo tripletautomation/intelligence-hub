@@ -178,6 +178,7 @@ export type Database = {
           id: string
           is_online: boolean | null
           location: string | null
+          promoted_to_item_id: string | null
           query: string | null
           source_name: string | null
           source_url: string
@@ -193,6 +194,7 @@ export type Database = {
           id?: string
           is_online?: boolean | null
           location?: string | null
+          promoted_to_item_id?: string | null
           query?: string | null
           source_name?: string | null
           source_url: string
@@ -208,6 +210,7 @@ export type Database = {
           id?: string
           is_online?: boolean | null
           location?: string | null
+          promoted_to_item_id?: string | null
           query?: string | null
           source_name?: string | null
           source_url?: string
@@ -390,6 +393,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      promote_discovery_to_item: {
+        Args: { _discovery_id: string }
+        Returns: string
       }
     }
     Enums: {
