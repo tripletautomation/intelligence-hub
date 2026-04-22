@@ -1,7 +1,7 @@
 import type { Item, Source, ItemUserState } from "@/lib/types";
 import { RegionBadge } from "./RegionBadge";
 import { formatHeRelative } from "@/lib/format";
-import { Bookmark, BookmarkCheck, ExternalLink, ThumbsDown, ThumbsUp, Check, Calendar, Mail } from "lucide-react";
+import { Bookmark, BookmarkCheck, ExternalLink, ThumbsDown, ThumbsUp, Check, Calendar, Mail, Trash2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -16,11 +16,15 @@ interface Props {
   selectable?: boolean;
   selected?: boolean;
   onToggleSelected?: () => void;
+  hidden?: boolean;
+  onHide?: () => void;
+  onRestore?: () => void;
 }
 
 export const ItemCard = ({
   item, source, state, onOpen, onAction,
   selectable, selected, onToggleSelected,
+  hidden, onHide, onRestore,
 }: Props) => {
   return (
     <article
