@@ -3,6 +3,7 @@ import { RegionBadge } from "./RegionBadge";
 import { formatHeRelative } from "@/lib/format";
 import { Bookmark, BookmarkCheck, ExternalLink, ThumbsDown, ThumbsUp, Check, Calendar, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { buildMailtoUrl } from "@/lib/mailto";
 
@@ -12,17 +13,44 @@ interface Props {
   state: ItemUserState;
   onOpen: () => void;
   onAction: (a: "mark_read" | "save" | "unsave" | "like" | "dislike" | "open_source") => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelected?: () => void;
 }
 
-export const ItemCard = ({ item, source, state, onOpen, onAction }: Props) => {
+export const ItemCard = ({
+  item, source, state, onOpen, onAction,
+  selectable, selected, onToggleSelected,
+}: Props) => {
   return (
     <article
       className={cn(
         "surface-card p-6 transition-all hover:shadow-md cursor-pointer animate-fade-in",
-        state.read && "opacity-75"
+        state.read && "opacity-75",
+        selectable && selected && "ring-2 ring-accent border-accent",
       )}
-      onClick={onOpen}
+      onClick={(e) => {
+        if (selectable) {
+          e.preventDefault();
+          onToggleSelected?.();
+          return;
+        }
+        onOpen();
+      }}
     >
+      {selectable && (
+        <div
+          className="flex items-center gap-2 mb-3 text-xs text-muted-foreground"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Checkbox
+            checked={!!selected}
+            onCheckedChange={() => onToggleSelected?.()}
+            aria-label="בחר פריט למאמר"
+          />
+          <span>{selected ? "נבחר ליצירת מאמר" : "סמן לבחירה"}</span>
+        </div>
+      )}
       <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3 flex-wrap">
         <RegionBadge region={item.region} />
         {source && <span className="font-medium text-foreground/70">{source.name}</span>}

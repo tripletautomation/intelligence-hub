@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { AppLayout } from "@/components/AppLayout";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDrawer } from "@/components/ItemDrawer";
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Sparkles, X, FileText, Loader2 } from "lucide-react";
 import { useItems, useSources, useUserActions, useLogAction, deriveItemStates } from "@/hooks/useIntelligence";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -12,6 +12,7 @@ import { formatHeRelative } from "@/lib/format";
 import { toast } from "sonner";
 import type { Item, ActionType } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
 
 type Filter = "all" | "israel" | "global" | "events" | "research" | "unread" | "saved" | "liked";
 
@@ -28,6 +29,7 @@ const filters: { id: Filter; label: string }[] = [
 
 const Dashboard = () => {
   const qc = useQueryClient();
+  const nav = useNavigate();
   const { data: items = [], dataUpdatedAt, refetch: refetchItems } = useItems();
   const { data: sources = [] } = useSources();
   const { data: actions } = useUserActions();
@@ -37,6 +39,41 @@ const Dashboard = () => {
   const [search, setSearch] = useState("");
   const [openItem, setOpenItem] = useState<Item | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleSelected = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const generateArticle = useMutation({
+    mutationFn: async () => {
+      const ids = Array.from(selectedIds);
+      if (ids.length === 0) throw new Error("בחר לפחות פריט אחד");
+      const { data, error } = await supabase.functions.invoke("generate-article", {
+        body: { item_ids: ids },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return (data as any).draft_id as string;
+    },
+    onSuccess: (draftId) => {
+      toast.success("טיוטת מאמר נוצרה");
+      exitSelectMode();
+      qc.invalidateQueries({ queryKey: ["article_drafts"] });
+      nav(`/drafts/${draftId}`);
+    },
+    onError: (e: Error) => toast.error(e.message ?? "שגיאה ביצירת המאמר"),
+  });
 
   const lastUpdatedIso = useMemo(() => {
     const ts = items
@@ -126,10 +163,24 @@ const Dashboard = () => {
             "טרם עודכן"
           )}
         </div>
-        <Button size="sm" variant="outline" onClick={handleRefresh} disabled={refreshing} className="gap-1.5">
-          <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
-          {refreshing ? "מרענן..." : "רענן עכשיו"}
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button size="sm" variant="ghost" onClick={() => nav("/drafts")} className="gap-1.5">
+            <FileText className="h-4 w-4" /> טיוטות מאמרים
+          </Button>
+          {!selectMode ? (
+            <Button size="sm" variant="outline" onClick={() => setSelectMode(true)} className="gap-1.5">
+              <Sparkles className="h-4 w-4" /> צור מאמר מהנבחרים
+            </Button>
+          ) : (
+            <Button size="sm" variant="ghost" onClick={exitSelectMode} className="gap-1.5">
+              <X className="h-4 w-4" /> בטל בחירה
+            </Button>
+          )}
+          <Button size="sm" variant="outline" onClick={handleRefresh} disabled={refreshing} className="gap-1.5">
+            <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+            {refreshing ? "מרענן..." : "רענן עכשיו"}
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -168,6 +219,9 @@ const Dashboard = () => {
               state={states.get(item.id) ?? { read: false, saved: false, liked: false, disliked: false }}
               onOpen={() => setOpenItem(item)}
               onAction={(a) => handleAction(item, a)}
+              selectable={selectMode}
+              selected={selectedIds.has(item.id)}
+              onToggleSelected={() => toggleSelected(item.id)}
             />
           ))
         )}
@@ -181,6 +235,30 @@ const Dashboard = () => {
         onOpenChange={(o) => !o && setOpenItem(null)}
         onAction={(a) => openItem && handleAction(openItem, a)}
       />
+
+      {selectMode && (
+        <div className="fixed bottom-6 inset-x-0 z-40 px-4 pointer-events-none">
+          <div className="max-w-3xl mx-auto bg-card border border-border shadow-lg rounded-2xl px-5 py-3 flex items-center gap-4 pointer-events-auto">
+            <div className="text-sm">
+              <span className="font-bold text-primary">{selectedIds.size}</span>
+              <span className="text-muted-foreground"> פריטים נבחרו</span>
+              <span className="text-muted-foreground"> · עד 10</span>
+            </div>
+            <div className="flex-1" />
+            <Button
+              size="sm"
+              onClick={() => generateArticle.mutate()}
+              disabled={selectedIds.size === 0 || selectedIds.size > 10 || generateArticle.isPending}
+              className="gap-1.5"
+            >
+              {generateArticle.isPending
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Sparkles className="h-4 w-4" />}
+              {generateArticle.isPending ? "יוצר מאמר..." : "צור מאמר"}
+            </Button>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 };
