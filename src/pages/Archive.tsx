@@ -56,6 +56,31 @@ const Archive = () => {
 
   return (
     <AppLayout search={search} onSearchChange={setSearch}>
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <button
+          onClick={() => setView("deleted")}
+          className={
+            "px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors " +
+            (view === "deleted"
+              ? "bg-primary text-primary-foreground border-primary"
+              : "bg-card text-muted-foreground border-border hover:text-foreground")
+          }
+        >
+          נמחקו ({hiddenSet.size})
+        </button>
+        <button
+          onClick={() => setView("all")}
+          className={
+            "px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors " +
+            (view === "all"
+              ? "bg-primary text-primary-foreground border-primary"
+              : "bg-card text-muted-foreground border-border hover:text-foreground")
+          }
+        >
+          כל הארכיון
+        </button>
+      </div>
+
       <div className="surface-card p-4 mb-6 grid grid-cols-2 lg:grid-cols-4 gap-3">
         <FilterSelect label="אזור" value={region} onValueChange={setRegion} options={[
           { v: "all", l: "הכל" }, { v: "israel", l: "ישראל" }, { v: "global", l: "גלובלי" },
@@ -84,6 +109,29 @@ const Archive = () => {
             state={states.get(item.id) ?? { read: false, saved: false, liked: false, disliked: false }}
             onOpen={() => setOpenItem(item)}
             onAction={(a) => handleAction(item, a)}
+            hidden={hiddenSet.has(item.id)}
+            onRestore={
+              hiddenSet.has(item.id)
+                ? () => hideItem.mutate(
+                    { itemId: item.id, hide: false },
+                    {
+                      onSuccess: () => toast.success("הפריט שוחזר לפיד"),
+                      onError: (e: Error) => toast.error(e.message),
+                    },
+                  )
+                : undefined
+            }
+            onHide={
+              !hiddenSet.has(item.id)
+                ? () => hideItem.mutate(
+                    { itemId: item.id, hide: true },
+                    {
+                      onSuccess: () => toast.success("הפריט הועבר לנמחקים"),
+                      onError: (e: Error) => toast.error(e.message),
+                    },
+                  )
+                : undefined
+            }
           />
         ))}
         {filtered.length === 0 && (
