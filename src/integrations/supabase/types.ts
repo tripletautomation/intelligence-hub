@@ -171,6 +171,54 @@ export type Database = {
         }
         Relationships: []
       }
+      saved_discoveries: {
+        Row: {
+          created_at: string
+          event_date: string | null
+          id: string
+          is_online: boolean | null
+          location: string | null
+          query: string | null
+          source_name: string | null
+          source_url: string
+          summary: string | null
+          title: string
+          updated_at: string
+          user_id: string
+          why_it_matters: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_date?: string | null
+          id?: string
+          is_online?: boolean | null
+          location?: string | null
+          query?: string | null
+          source_name?: string | null
+          source_url: string
+          summary?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+          why_it_matters?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_date?: string | null
+          id?: string
+          is_online?: boolean | null
+          location?: string | null
+          query?: string | null
+          source_name?: string | null
+          source_url?: string
+          summary?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+          why_it_matters?: string | null
+        }
+        Relationships: []
+      }
       sources: {
         Row: {
           active: boolean
