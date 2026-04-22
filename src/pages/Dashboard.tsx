@@ -169,15 +169,6 @@ const Dashboard = () => {
           )}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            size="sm"
-            variant={showArchived ? "default" : "ghost"}
-            onClick={() => setShowArchived((v) => !v)}
-            className="gap-1.5"
-          >
-            <Trash2 className="h-4 w-4" />
-            {showArchived ? "חזרה לפיד" : `ארכיון אישי${hiddenCount ? ` (${hiddenCount})` : ""}`}
-          </Button>
           <Button size="sm" variant="ghost" onClick={() => nav("/drafts")} className="gap-1.5">
             <FileText className="h-4 w-4" /> טיוטות מאמרים
           </Button>
