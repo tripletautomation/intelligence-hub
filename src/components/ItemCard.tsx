@@ -147,6 +147,25 @@ export const ItemCard = ({
         >
           <ThumbsDown className="h-3.5 w-3.5" />
         </Button>
+        {hidden ? (
+          onRestore && (
+            <Button variant="ghost" size="sm" onClick={onRestore} className="gap-1.5 mr-auto">
+              <RotateCcw className="h-3.5 w-3.5" /> שחזר
+            </Button>
+          )
+        ) : (
+          onHide && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onHide}
+              className="gap-1.5 mr-auto text-muted-foreground hover:text-destructive"
+              title="העבר לארכיון אישי"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> מחק
+            </Button>
+          )
+        )}
       </div>
     </article>
   );
