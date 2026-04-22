@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      article_drafts: {
+        Row: {
+          body: string | null
+          closing: string | null
+          created_at: string
+          id: string
+          intro: string | null
+          source_item_ids: string[]
+          status: string
+          style_note: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          closing?: string | null
+          created_at?: string
+          id?: string
+          intro?: string | null
+          source_item_ids?: string[]
+          status?: string
+          style_note?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          closing?: string | null
+          created_at?: string
+          id?: string
+          intro?: string | null
+          source_item_ids?: string[]
+          status?: string
+          style_note?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       ingestion_runs: {
         Row: {
           errors_json: Json | null
