@@ -26,6 +26,7 @@ const tabs = [
   { to: "/", label: "ראשי", end: true },
   { to: "/events", label: "אירועים" },
   { to: "/discover", label: "חיפוש אירועים" },
+  { to: "/drafts", label: "מאמרים" },
   { to: "/archive", label: "ארכיון" },
 ];
 
