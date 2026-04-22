@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDrawer } from "@/components/ItemDrawer";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Sparkles, X, FileText, Loader2, Trash2 } from "lucide-react";
+import { RefreshCw, Sparkles, X, FileText, Loader2 } from "lucide-react";
 import { useItems, useSources, useUserActions, useLogAction, deriveItemStates, usePreferences, useHideItem } from "@/hooks/useIntelligence";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -43,7 +43,6 @@ const Dashboard = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showArchived, setShowArchived] = useState(false);
 
   const toggleSelected = (id: string) =>
     setSelectedIds((prev) => {
