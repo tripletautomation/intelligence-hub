@@ -5,6 +5,8 @@ import { formatHeDateTime } from "@/lib/format";
 import { RegionBadge } from "@/components/RegionBadge";
 import { Button } from "@/components/ui/button";
 import { Calendar, MapPin, ExternalLink, Clock } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { SavedDiscoveriesSection } from "@/components/events/SavedDiscoveriesSection";
 import { cn } from "@/lib/utils";
 import type { Item, Source } from "@/lib/types";
 
@@ -31,6 +33,7 @@ const Events = () => {
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState<"all" | "online" | "physical">("all");
   const [region, setRegion] = useState<"all" | "israel" | "global">("all");
+  const [tab, setTab] = useState<"this_month" | "next_month" | "past" | "saved">("this_month");
 
   const sourcesById = useMemo(
     () => new Map(sources.map((s) => [s.id, s])),
@@ -72,20 +75,27 @@ const Events = () => {
 
   return (
     <AppLayout search={search} onSearchChange={setSearch}>
-      <div className="flex flex-wrap gap-2 mb-6">
-        <Chip active={mode === "all"} onClick={() => setMode("all")}>כל האירועים</Chip>
-        <Chip active={mode === "online"} onClick={() => setMode("online")}>אונליין</Chip>
-        <Chip active={mode === "physical"} onClick={() => setMode("physical")}>פיזי</Chip>
-        <div className="w-px bg-border mx-2" />
-        <Chip active={region === "all"} onClick={() => setRegion("all")}>הכל</Chip>
-        <Chip active={region === "israel"} onClick={() => setRegion("israel")}>ישראל</Chip>
-        <Chip active={region === "global"} onClick={() => setRegion("global")}>גלובלי</Chip>
-      </div>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} dir="rtl" className="w-full">
+        <TabsList className="mb-6">
+          <TabsTrigger value="this_month">החודש <span className="mr-1.5 text-xs text-muted-foreground">({thisMonth.length})</span></TabsTrigger>
+          <TabsTrigger value="next_month">החודש הבא <span className="mr-1.5 text-xs text-muted-foreground">({nextMonth.length})</span></TabsTrigger>
+          <TabsTrigger value="past">אירועים שעברו <span className="mr-1.5 text-xs text-muted-foreground">({past.length})</span></TabsTrigger>
+          <TabsTrigger value="saved">אירועים שמורים</TabsTrigger>
+        </TabsList>
 
-      {totalUpcoming === 0 && past.length === 0 ? (
-        <div className="surface-card p-12 text-center text-muted-foreground">אין אירועים תואמים</div>
-      ) : (
-        <div className="space-y-10">
+        {tab !== "saved" && (
+          <div className="flex flex-wrap gap-2 mb-6">
+            <Chip active={mode === "all"} onClick={() => setMode("all")}>כל האירועים</Chip>
+            <Chip active={mode === "online"} onClick={() => setMode("online")}>אונליין</Chip>
+            <Chip active={mode === "physical"} onClick={() => setMode("physical")}>פיזי</Chip>
+            <div className="w-px bg-border mx-2" />
+            <Chip active={region === "all"} onClick={() => setRegion("all")}>הכל</Chip>
+            <Chip active={region === "israel"} onClick={() => setRegion("israel")}>ישראל</Chip>
+            <Chip active={region === "global"} onClick={() => setRegion("global")}>גלובלי</Chip>
+          </div>
+        )}
+
+        <TabsContent value="this_month" className="mt-0">
           <Section
             title="החודש"
             subtitle="אירועים שמתקיימים החודש — הקרוב ביותר ראשון"
@@ -94,6 +104,8 @@ const Events = () => {
             sourcesById={sourcesById}
             emptyText="אין אירועים החודש"
           />
+        </TabsContent>
+        <TabsContent value="next_month" className="mt-0">
           <Section
             title="החודש הבא"
             subtitle="אירועים מהחודש הבא והלאה"
@@ -102,6 +114,8 @@ const Events = () => {
             sourcesById={sourcesById}
             emptyText="אין אירועים בחודש הבא"
           />
+        </TabsContent>
+        <TabsContent value="past" className="mt-0">
           <Section
             title="אירועים שעברו"
             subtitle="ארכיון — האחרונים שהיו ראשונים"
@@ -111,8 +125,11 @@ const Events = () => {
             emptyText="אין אירועים בארכיון"
             muted
           />
-        </div>
-      )}
+        </TabsContent>
+        <TabsContent value="saved" className="mt-0">
+          <SavedDiscoveriesSection />
+        </TabsContent>
+      </Tabs>
     </AppLayout>
   );
 };
