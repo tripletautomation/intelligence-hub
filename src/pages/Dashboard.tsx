@@ -118,11 +118,7 @@ const Dashboard = () => {
       // Hide off-topic / low-relevance items (not related to data centers / computing / tech)
       if ((it.relevance_score ?? 0) < 30) return false;
       const isHidden = hiddenSet.has(it.id);
-      if (showArchived) {
-        if (!isHidden) return false;
-      } else {
-        if (isHidden) return false;
-      }
+      if (isHidden) return false;
       if (filter === "israel" && it.region !== "israel") return false;
       if (filter === "global" && it.region !== "global") return false;
       if (filter === "events" && it.item_type !== "event") return false;
@@ -136,9 +132,7 @@ const Dashboard = () => {
       }
       return true;
     });
-  }, [items, states, filter, search, prefs?.hidden_item_ids, showArchived]);
-
-  const hiddenCount = (prefs?.hidden_item_ids ?? []).length;
+  }, [items, states, filter, search, prefs?.hidden_item_ids]);
 
   const kpi = useMemo(() => {
     const today = new Date();
