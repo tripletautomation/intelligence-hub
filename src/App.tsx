@@ -12,6 +12,8 @@ import Events from "./pages/Events";
 import Discover from "./pages/Discover";
 import Preferences from "./pages/Preferences";
 import Admin from "./pages/Admin";
+import Drafts from "./pages/Drafts";
+import DraftDetail from "./pages/DraftDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,6 +33,8 @@ const App = () => (
             <Route path="/discover" element={<RequireAuth><Discover /></RequireAuth>} />
             <Route path="/preferences" element={<RequireAuth><Preferences /></RequireAuth>} />
             <Route path="/admin" element={<RequireAuth><Admin /></RequireAuth>} />
+            <Route path="/drafts" element={<RequireAuth><Drafts /></RequireAuth>} />
+            <Route path="/drafts/:id" element={<RequireAuth><DraftDetail /></RequireAuth>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
