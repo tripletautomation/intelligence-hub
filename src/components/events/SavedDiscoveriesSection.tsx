@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -76,7 +75,7 @@ function toMailtoUrl(ev: SavedRow) {
   return `mailto:?subject=${subject}&body=${body}`;
 }
 
-const Saved = () => {
+export const SavedDiscoveriesSection = () => {
   const { user } = useAuth();
   const { data: isAdmin } = useIsAdmin();
   const { toast } = useToast();
@@ -141,6 +140,7 @@ const Saved = () => {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["saved_discoveries_full"] });
+      qc.invalidateQueries({ queryKey: ["items"] });
       toast({
         title: "קודם לאירועים",
         description: "הפריט נוסף לזרם האירועים המנוהל.",
@@ -153,82 +153,78 @@ const Saved = () => {
   const promotedCount = rows.filter((r) => r.promoted_to_item_id).length;
 
   return (
-    <AppLayout>
-      <div className="space-y-8">
-        <section className="rounded-2xl bg-gradient-to-br from-accent/5 via-primary/5 to-background border border-border p-8">
-          <div className="flex items-center gap-2 text-accent text-xs font-semibold uppercase tracking-widest mb-2">
-            <Bookmark className="h-3.5 w-3.5" /> השמורים שלי
-          </div>
-          <h1 className="text-2xl md:text-3xl font-bold text-primary mb-1">
-            אירועים ששמרת מחיפוש חכם
-          </h1>
-          <p className="text-sm text-muted-foreground mb-6">
-            רשימה פרטית של כל תוצאות החיפוש שסימנת לשמירה. {rows.length} פריטים
-            {isAdmin && promotedCount > 0 && ` · ${promotedCount} כבר קודמו לאירועים`}
-          </p>
+    <div className="space-y-6">
+      <div className="rounded-2xl bg-gradient-to-br from-accent/5 via-primary/5 to-background border border-border p-6">
+        <div className="flex items-center gap-2 text-accent text-xs font-semibold uppercase tracking-widest mb-2">
+          <Bookmark className="h-3.5 w-3.5" /> אירועים שמורים
+        </div>
+        <h2 className="text-xl md:text-2xl font-bold text-primary mb-1">
+          האירועים ששמרת מחיפוש חכם
+        </h2>
+        <p className="text-sm text-muted-foreground mb-5">
+          רשימה פרטית של תוצאות חיפוש שסימנת. {rows.length} פריטים
+          {isAdmin && promotedCount > 0 && ` · ${promotedCount} כבר קודמו לאירועים`}
+        </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <Input
-              placeholder="חיפוש בכותרות, סיכומים..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="bg-background"
-            />
-            <Select value={format} onValueChange={(v) => setFormat(v as FormatFilter)}>
-              <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">כל פורמט</SelectItem>
-                <SelectItem value="online">אונליין</SelectItem>
-                <SelectItem value="physical">פיזי</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={status} onValueChange={(v) => setStatus(v as StatusFilter)}>
-              <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">כל הסטטוסים</SelectItem>
-                <SelectItem value="promoted">קודמו לאירועים</SelectItem>
-                <SelectItem value="not_promoted">לא קודמו</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </section>
-
-        <section>
-          {isLoading && (
-            <div className="flex items-center justify-center py-16 text-muted-foreground">
-              <Loader2 className="h-6 w-6 animate-spin" />
-            </div>
-          )}
-
-          {!isLoading && filtered.length === 0 && (
-            <div className="text-center py-16 text-muted-foreground text-sm">
-              {rows.length === 0 ? (
-                <>
-                  עדיין לא שמרת אירועים. עבור ל
-                  <a href="/discover" className="text-accent hover:underline mx-1">חיפוש אירועים</a>
-                  כדי להתחיל.
-                </>
-              ) : (
-                "לא נמצאו תוצאות מתאימות לפילטרים."
-              )}
-            </div>
-          )}
-
-          <div className="grid gap-4 md:grid-cols-2">
-            {filtered.map((r) => (
-              <SavedCard
-                key={r.id}
-                row={r}
-                isAdmin={!!isAdmin}
-                onRemove={() => removeOne.mutate(r.id)}
-                onPromote={() => promote.mutate(r.id)}
-                isPromoting={promote.isPending && promote.variables === r.id}
-              />
-            ))}
-          </div>
-        </section>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Input
+            placeholder="חיפוש בכותרות, סיכומים..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="bg-background"
+          />
+          <Select value={format} onValueChange={(v) => setFormat(v as FormatFilter)}>
+            <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="any">כל פורמט</SelectItem>
+              <SelectItem value="online">אונליין</SelectItem>
+              <SelectItem value="physical">פיזי</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={status} onValueChange={(v) => setStatus(v as StatusFilter)}>
+            <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="any">כל הסטטוסים</SelectItem>
+              <SelectItem value="promoted">קודמו לאירועים</SelectItem>
+              <SelectItem value="not_promoted">לא קודמו</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
-    </AppLayout>
+
+      {isLoading && (
+        <div className="flex items-center justify-center py-16 text-muted-foreground">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+      )}
+
+      {!isLoading && filtered.length === 0 && (
+        <div className="text-center py-16 text-muted-foreground text-sm">
+          {rows.length === 0 ? (
+            <>
+              עדיין לא שמרת אירועים. עבור ל
+              <a href="/discover" className="text-accent hover:underline mx-1">חיפוש אירועים</a>
+              כדי להתחיל.
+            </>
+          ) : (
+            "לא נמצאו תוצאות מתאימות לפילטרים."
+          )}
+        </div>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {filtered.map((r) => (
+          <SavedCard
+            key={r.id}
+            row={r}
+            isAdmin={!!isAdmin}
+            onRemove={() => removeOne.mutate(r.id)}
+            onPromote={() => promote.mutate(r.id)}
+            isPromoting={promote.isPending && promote.variables === r.id}
+          />
+        ))}
+      </div>
+    </div>
   );
 };
 
@@ -352,5 +348,3 @@ const SavedCard = ({
     </Card>
   );
 };
-
-export default Saved;
