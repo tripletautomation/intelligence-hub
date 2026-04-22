@@ -112,7 +112,7 @@ const Auth = () => {
           onClick={() => setMode(mode === "in" ? "up" : "in")}
           className="text-sm text-accent hover:underline mt-6 block w-full text-center"
         >
-          {mode === "in" ? "אין לך חשבון? צור עכשיו" : "כבר יש חשבון? התחברי"}
+          {mode === "in" ? "אין לך חשבון? צור עכשיו" : "כבר יש חשבון? התחבר"}
         </button>
       </div>
     </div>
