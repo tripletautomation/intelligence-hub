@@ -1,7 +1,7 @@
 import { formatHeDateTime } from "@/lib/format";
 
-const INTRO_EVENT_OR_ARTICLE = "ראיתי כתבה / אירוע שעשוי לעניין אותך";
-const INTRO_GENERATED_ARTICLE = "ראיתי מאמר שעשוי לעניין אותך";
+const INTRO_EVENT_OR_ARTICLE = "אני חושב שזה עשוי לעניין אותך";
+const INTRO_GENERATED_ARTICLE = "אני חושב שזה עשוי לעניין אותך";
 
 export interface MailItemInput {
   kind: "event" | "article" | "generated_article";
