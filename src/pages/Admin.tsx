@@ -35,10 +35,12 @@ const Admin = () => {
   const [running, setRunning] = useState(false);
   const [runningResearch, setRunningResearch] = useState(false);
   const [runningPageEvents, setRunningPageEvents] = useState(false);
+  const [runningPageResearch, setRunningPageResearch] = useState(false);
   const [hideSeed, setHideSeed] = useState(() => localStorage.getItem("hideSeed") === "1");
 
   const realSources = sources.filter((s: any) => !s.is_seed && s.rss_url);
   const pageEventSources = sources.filter((s: any) => s.type === "page" && s.category === "events" && s.active);
+  const pageResearchSources = sources.filter((s: any) => s.type === "page" && s.category === "research" && s.active);
   const seedItemsCount = items.filter((i: any) => i.is_seed).length;
   const realItemsCount = items.length - seedItemsCount;
   const researchItemsCount = items.filter((i: any) => i.item_type === "research").length;
@@ -56,9 +58,14 @@ const Admin = () => {
     },
   });
 
-  const newsRuns = runs.filter((r) => r.triggered_by !== "manual-research" && r.triggered_by !== "manual-page-events").slice(0, 20);
+  const newsRuns = runs.filter((r) =>
+    r.triggered_by !== "manual-research" &&
+    r.triggered_by !== "manual-page-events" &&
+    r.triggered_by !== "manual-page-research"
+  ).slice(0, 20);
   const researchRuns = runs.filter((r) => r.triggered_by === "manual-research").slice(0, 20);
   const pageEventRuns = runs.filter((r) => r.triggered_by === "manual-page-events").slice(0, 20);
+  const pageResearchRuns = runs.filter((r) => r.triggered_by === "manual-page-research").slice(0, 20);
 
   const runIngestion = async (sourceId?: string) => {
     setRunning(true);
@@ -117,6 +124,23 @@ const Admin = () => {
       toast.error(e instanceof Error ? e.message : "שגיאה בריצת Page Events");
     } finally {
       setRunningPageEvents(false);
+    }
+  };
+
+  const runPageResearchIngestion = async () => {
+    setRunningPageResearch(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("ingest-page-research", { body: {} });
+      if (error) throw error;
+      const results = (data as any)?.results ?? [];
+      const totalInserted = results.reduce((s: number, r: any) => s + (r.inserted ?? 0), 0);
+      const totalFetched = results.reduce((s: number, r: any) => s + (r.fetched ?? 0), 0);
+      toast.success(`Page Research — נמשכו ${totalFetched} · חדשים ${totalInserted}`);
+      await Promise.all([refetchRuns(), qc.invalidateQueries({ queryKey: ["items"] })]);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה בריצת Page Research");
+    } finally {
+      setRunningPageResearch(false);
     }
   };
 
@@ -198,17 +222,39 @@ const Admin = () => {
           </div>
         </div>
 
-        <LogsMonitoringSection newsRuns={newsRuns} researchRuns={researchRuns} pageEventRuns={pageEventRuns} />
+        <div className="surface-card p-6">
+          <div className="flex items-center justify-between mb-2 gap-4 flex-wrap">
+            <div>
+              <h2 className="text-lg font-bold text-primary">הרצת Page Research ידנית</h2>
+              <p className="text-sm text-muted-foreground">
+                סורק עמודי whitepapers / reports (ללא RSS) דרך Firecrawl ומחלץ פריטי מחקר מובנים עם AI. נשמרים כ-<code className="text-xs">item_type=research</code>.
+              </p>
+            </div>
+            <Button onClick={runPageResearchIngestion} disabled={runningPageResearch || pageResearchSources.length === 0} variant="secondary">
+              {runningPageResearch ? "רץ..." : "הרץ Page Research"}
+            </Button>
+          </div>
+          <div className="text-xs text-muted-foreground mt-2" dir="ltr">
+            Sources: {pageResearchSources.length === 0 ? "none configured" : pageResearchSources.map((s: any) => s.display_name ?? s.name).join(" · ")} · Firecrawl + Lovable AI · Manual only
+          </div>
+        </div>
+
+        <LogsMonitoringSection
+          newsRuns={newsRuns}
+          researchRuns={researchRuns}
+          pageEventRuns={pageEventRuns}
+          pageResearchRuns={pageResearchRuns}
+        />
       </div>
     </AppLayout>
   );
 };
 
 const LogsMonitoringSection = ({
-  newsRuns, researchRuns, pageEventRuns,
-}: { newsRuns: IngestionRun[]; researchRuns: IngestionRun[]; pageEventRuns: IngestionRun[] }) => {
+  newsRuns, researchRuns, pageEventRuns, pageResearchRuns,
+}: { newsRuns: IngestionRun[]; researchRuns: IngestionRun[]; pageEventRuns: IngestionRun[]; pageResearchRuns: IngestionRun[] }) => {
   const [open, setOpen] = useState(false);
-  const allRuns = [...newsRuns, ...researchRuns, ...pageEventRuns].sort(
+  const allRuns = [...newsRuns, ...researchRuns, ...pageEventRuns, ...pageResearchRuns].sort(
     (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime(),
   );
   const last = allRuns[0];
@@ -254,6 +300,7 @@ const LogsMonitoringSection = ({
         <RunsLogCard title="לוג ריצות — News" runs={newsRuns} />
         <RunsLogCard title="לוג ריצות — Research" runs={researchRuns} />
         <RunsLogCard title="לוג ריצות — Page Events" runs={pageEventRuns} />
+        <RunsLogCard title="לוג ריצות — Page Research" runs={pageResearchRuns} />
       </CollapsibleContent>
     </Collapsible>
   );
