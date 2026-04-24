@@ -43,6 +43,13 @@ async function firecrawlScrape(url: string): Promise<{ markdown: string; resolve
         "https://www.datacenterdynamics.com/en/broadcasts/upcoming/",
       );
     }
+    if (parsed.hostname.includes("idca.org.il")) {
+      // IDCA exposes both an EN and HE events page; some events appear only on one.
+      candidates.push(
+        "https://www.idca.org.il/en/events",
+        "https://www.idca.org.il/events",
+      );
+    }
   } catch {
     // ignore invalid source URL and let the original request fail below
   }
@@ -63,9 +70,10 @@ async function firecrawlScrape(url: string): Promise<{ markdown: string; resolve
       body: JSON.stringify({
         url: candidate,
         formats: ["markdown"],
-        onlyMainContent: true,
-        waitFor: 2500,
-        timeout: 25000,
+        // IDCA hides next-month cards behind tabs / lazy sections that live outside main content.
+        onlyMainContent: false,
+        waitFor: 5000,
+        timeout: 35000,
         proxy: "stealth",
         blockAds: true,
       }),
@@ -102,17 +110,30 @@ async function firecrawlScrape(url: string): Promise<{ markdown: string; resolve
 async function extractEvents(
   pageUrl: string,
   markdown: string,
-  debug: { raw?: string; mdLen?: number; finishReason?: string; rawArgs?: string },
+  debug: { raw?: string; mdLen?: number; finishReason?: string; rawArgs?: string; mdSentLen?: number; candidateCount?: number },
 ): Promise<ExtractedEvent[]> {
   debug.mdLen = markdown.length;
+  // Heuristic count of "raw candidates" — any line that mentions a date keyword or month.
+  const monthRx = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\b/i;
+  const dateRx = /\b(20\d{2}|register|upcoming|webinar|conference|summit|event)\b/i;
+  debug.candidateCount = markdown
+    .split(/\n+/)
+    .filter((l) => l.length > 8 && (monthRx.test(l) || dateRx.test(l)))
+    .length;
   const sys =
     "You extract structured event records from a scraped events listing page (markdown). " +
-    "The page may be a conferences, broadcasts, or upcoming events index rather than a URL literally named events. " +
-    "Return ONLY concrete upcoming or recent event records that a user could attend or watch. Skip navigation, cookie banners, ads, footers, news articles, and generic marketing copy. " +
+    "The page may contain MULTIPLE sections such as 'This month', 'Upcoming', 'Next month', 'Future events', 'Past events', tabs, or carousels. " +
+    "EXTRACT EVERY CONCRETE EVENT from ALL sections — do NOT stop at the first section, the first month, or the first visible block. " +
+    "Include all upcoming/future events, even those several months away. Include past events too if they appear with a real date — categorization happens later. " +
+    "Skip navigation, cookie banners, ads, footers, generic news articles, and marketing copy without a date or registration. " +
     "Translate title and summary to Hebrew. Provide a 1-sentence Hebrew 'why it matters' for an Israeli data-center professional. " +
     "If event_date is unknown or ambiguous, set it to null. Use ISO 8601 with timezone if possible. " +
-    "Resolve relative URLs against the page URL.";
-  const user = `Page URL: ${pageUrl}\n\nPage markdown (truncated):\n${markdown.slice(0, 30000)}`;
+    "Resolve relative URLs against the page URL. " +
+    "Aim for completeness: it is better to return 15 events than to return only 3.";
+  // Send more of the page so later sections (next month, future) are not truncated away.
+  const mdToSend = markdown.slice(0, 60000);
+  debug.mdSentLen = mdToSend.length;
+  const user = `Page URL: ${pageUrl}\n\nPage markdown:\n${mdToSend}`;
 
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -214,9 +235,15 @@ async function ingestPageSource(source: {
 
   try {
     const { markdown: md, resolvedUrl } = await firecrawlScrape(source.url);
-    const debug: { raw?: string; mdLen?: number; finishReason?: string; rawArgs?: string } = {};
+    const debug: { raw?: string; mdLen?: number; finishReason?: string; rawArgs?: string; mdSentLen?: number; candidateCount?: number } = {};
     const events = await extractEvents(resolvedUrl, md, debug);
     fetched = events.length;
+    // Always emit a debug breadcrumb so we can see scrape/extract stats in the run logs.
+    errors.push({
+      stage: "debug",
+      url: resolvedUrl,
+      message: `md_len=${debug.mdLen} md_sent=${debug.mdSentLen} raw_candidates=${debug.candidateCount} extracted=${events.length} finish=${debug.finishReason}`,
+    });
     if (events.length === 0) {
       errors.push({
         stage: "ai-empty",
@@ -228,6 +255,7 @@ async function ingestPageSource(source: {
       try {
         if (!ev.source_link || !ev.title_he) {
           skipped++;
+          errors.push({ stage: "skip-missing-fields", url: ev.source_link, message: `missing source_link or title_he (title="${ev.title ?? ""}")` });
           continue;
         }
         const { data: existing } = await admin
@@ -237,6 +265,7 @@ async function ingestPageSource(source: {
           .maybeSingle();
         if (existing) {
           skipped++;
+          errors.push({ stage: "skip-duplicate", url: ev.source_link, message: `already in items` });
           continue;
         }
 
@@ -262,7 +291,10 @@ async function ingestPageSource(source: {
           event_register_url: ev.source_link,
         });
         if (insErr) {
-          if ((insErr as any).code === "23505") skipped++;
+          if ((insErr as any).code === "23505") {
+            skipped++;
+            errors.push({ stage: "skip-unique", url: ev.source_link, message: insErr.message });
+          }
           else errors.push({ stage: "insert", url: ev.source_link, message: insErr.message });
         } else {
           inserted++;
@@ -276,7 +308,11 @@ async function ingestPageSource(source: {
       }
     }
 
-    const status = errors.length === 0 ? "success" : inserted > 0 ? "partial" : "error";
+    // Debug/skip breadcrumbs are informational — they should not flip the status to error.
+    const realErrors = errors.filter(
+      (e) => !["debug", "skip-duplicate", "skip-missing-fields", "skip-unique"].includes(e.stage),
+    );
+    const status = realErrors.length === 0 ? "success" : inserted > 0 ? "partial" : "error";
     await admin.from("ingestion_runs").update({
       finished_at: new Date().toISOString(),
       status, fetched, inserted, skipped,
