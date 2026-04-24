@@ -43,6 +43,13 @@ async function firecrawlScrape(url: string): Promise<{ markdown: string; resolve
         "https://www.datacenterdynamics.com/en/broadcasts/upcoming/",
       );
     }
+    if (parsed.hostname.includes("idca.org.il")) {
+      // IDCA exposes both an EN and HE events page; some events appear only on one.
+      candidates.push(
+        "https://www.idca.org.il/en/events",
+        "https://www.idca.org.il/events",
+      );
+    }
   } catch {
     // ignore invalid source URL and let the original request fail below
   }
@@ -63,9 +70,10 @@ async function firecrawlScrape(url: string): Promise<{ markdown: string; resolve
       body: JSON.stringify({
         url: candidate,
         formats: ["markdown"],
-        onlyMainContent: true,
-        waitFor: 2500,
-        timeout: 25000,
+        // IDCA hides next-month cards behind tabs / lazy sections that live outside main content.
+        onlyMainContent: false,
+        waitFor: 5000,
+        timeout: 35000,
         proxy: "stealth",
         blockAds: true,
       }),
