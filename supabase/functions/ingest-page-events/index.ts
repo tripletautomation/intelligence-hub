@@ -110,17 +110,30 @@ async function firecrawlScrape(url: string): Promise<{ markdown: string; resolve
 async function extractEvents(
   pageUrl: string,
   markdown: string,
-  debug: { raw?: string; mdLen?: number; finishReason?: string; rawArgs?: string },
+  debug: { raw?: string; mdLen?: number; finishReason?: string; rawArgs?: string; mdSentLen?: number; candidateCount?: number },
 ): Promise<ExtractedEvent[]> {
   debug.mdLen = markdown.length;
+  // Heuristic count of "raw candidates" — any line that mentions a date keyword or month.
+  const monthRx = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\b/i;
+  const dateRx = /\b(20\d{2}|register|upcoming|webinar|conference|summit|event)\b/i;
+  debug.candidateCount = markdown
+    .split(/\n+/)
+    .filter((l) => l.length > 8 && (monthRx.test(l) || dateRx.test(l)))
+    .length;
   const sys =
     "You extract structured event records from a scraped events listing page (markdown). " +
-    "The page may be a conferences, broadcasts, or upcoming events index rather than a URL literally named events. " +
-    "Return ONLY concrete upcoming or recent event records that a user could attend or watch. Skip navigation, cookie banners, ads, footers, news articles, and generic marketing copy. " +
+    "The page may contain MULTIPLE sections such as 'This month', 'Upcoming', 'Next month', 'Future events', 'Past events', tabs, or carousels. " +
+    "EXTRACT EVERY CONCRETE EVENT from ALL sections — do NOT stop at the first section, the first month, or the first visible block. " +
+    "Include all upcoming/future events, even those several months away. Include past events too if they appear with a real date — categorization happens later. " +
+    "Skip navigation, cookie banners, ads, footers, generic news articles, and marketing copy without a date or registration. " +
     "Translate title and summary to Hebrew. Provide a 1-sentence Hebrew 'why it matters' for an Israeli data-center professional. " +
     "If event_date is unknown or ambiguous, set it to null. Use ISO 8601 with timezone if possible. " +
-    "Resolve relative URLs against the page URL.";
-  const user = `Page URL: ${pageUrl}\n\nPage markdown (truncated):\n${markdown.slice(0, 30000)}`;
+    "Resolve relative URLs against the page URL. " +
+    "Aim for completeness: it is better to return 15 events than to return only 3.";
+  // Send more of the page so later sections (next month, future) are not truncated away.
+  const mdToSend = markdown.slice(0, 60000);
+  debug.mdSentLen = mdToSend.length;
+  const user = `Page URL: ${pageUrl}\n\nPage markdown:\n${mdToSend}`;
 
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
