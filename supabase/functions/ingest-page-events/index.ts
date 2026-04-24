@@ -235,9 +235,15 @@ async function ingestPageSource(source: {
 
   try {
     const { markdown: md, resolvedUrl } = await firecrawlScrape(source.url);
-    const debug: { raw?: string; mdLen?: number; finishReason?: string; rawArgs?: string } = {};
+    const debug: { raw?: string; mdLen?: number; finishReason?: string; rawArgs?: string; mdSentLen?: number; candidateCount?: number } = {};
     const events = await extractEvents(resolvedUrl, md, debug);
     fetched = events.length;
+    // Always emit a debug breadcrumb so we can see scrape/extract stats in the run logs.
+    errors.push({
+      stage: "debug",
+      url: resolvedUrl,
+      message: `md_len=${debug.mdLen} md_sent=${debug.mdSentLen} raw_candidates=${debug.candidateCount} extracted=${events.length} finish=${debug.finishReason}`,
+    });
     if (events.length === 0) {
       errors.push({
         stage: "ai-empty",
@@ -249,6 +255,7 @@ async function ingestPageSource(source: {
       try {
         if (!ev.source_link || !ev.title_he) {
           skipped++;
+          errors.push({ stage: "skip-missing-fields", url: ev.source_link, message: `missing source_link or title_he (title="${ev.title ?? ""}")` });
           continue;
         }
         const { data: existing } = await admin
@@ -258,6 +265,7 @@ async function ingestPageSource(source: {
           .maybeSingle();
         if (existing) {
           skipped++;
+          errors.push({ stage: "skip-duplicate", url: ev.source_link, message: `already in items` });
           continue;
         }
 
@@ -283,7 +291,10 @@ async function ingestPageSource(source: {
           event_register_url: ev.source_link,
         });
         if (insErr) {
-          if ((insErr as any).code === "23505") skipped++;
+          if ((insErr as any).code === "23505") {
+            skipped++;
+            errors.push({ stage: "skip-unique", url: ev.source_link, message: insErr.message });
+          }
           else errors.push({ stage: "insert", url: ev.source_link, message: insErr.message });
         } else {
           inserted++;
@@ -297,7 +308,11 @@ async function ingestPageSource(source: {
       }
     }
 
-    const status = errors.length === 0 ? "success" : inserted > 0 ? "partial" : "error";
+    // Debug/skip breadcrumbs are informational — they should not flip the status to error.
+    const realErrors = errors.filter(
+      (e) => !["debug", "skip-duplicate", "skip-missing-fields", "skip-unique"].includes(e.stage),
+    );
+    const status = realErrors.length === 0 ? "success" : inserted > 0 ? "partial" : "error";
     await admin.from("ingestion_runs").update({
       finished_at: new Date().toISOString(),
       status, fetched, inserted, skipped,
