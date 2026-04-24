@@ -35,10 +35,12 @@ const Admin = () => {
   const [running, setRunning] = useState(false);
   const [runningResearch, setRunningResearch] = useState(false);
   const [runningPageEvents, setRunningPageEvents] = useState(false);
+  const [runningPageResearch, setRunningPageResearch] = useState(false);
   const [hideSeed, setHideSeed] = useState(() => localStorage.getItem("hideSeed") === "1");
 
   const realSources = sources.filter((s: any) => !s.is_seed && s.rss_url);
   const pageEventSources = sources.filter((s: any) => s.type === "page" && s.category === "events" && s.active);
+  const pageResearchSources = sources.filter((s: any) => s.type === "page" && s.category === "research" && s.active);
   const seedItemsCount = items.filter((i: any) => i.is_seed).length;
   const realItemsCount = items.length - seedItemsCount;
   const researchItemsCount = items.filter((i: any) => i.item_type === "research").length;
@@ -56,9 +58,14 @@ const Admin = () => {
     },
   });
 
-  const newsRuns = runs.filter((r) => r.triggered_by !== "manual-research" && r.triggered_by !== "manual-page-events").slice(0, 20);
+  const newsRuns = runs.filter((r) =>
+    r.triggered_by !== "manual-research" &&
+    r.triggered_by !== "manual-page-events" &&
+    r.triggered_by !== "manual-page-research"
+  ).slice(0, 20);
   const researchRuns = runs.filter((r) => r.triggered_by === "manual-research").slice(0, 20);
   const pageEventRuns = runs.filter((r) => r.triggered_by === "manual-page-events").slice(0, 20);
+  const pageResearchRuns = runs.filter((r) => r.triggered_by === "manual-page-research").slice(0, 20);
 
   const runIngestion = async (sourceId?: string) => {
     setRunning(true);
