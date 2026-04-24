@@ -130,11 +130,17 @@ const Admin = () => {
   const runPageResearchIngestion = async () => {
     setRunningPageResearch(true);
     try {
-      const { data, error } = await supabase.functions.invoke("ingest-page-research", { body: {} });
-      if (error) throw error;
-      const results = (data as any)?.results ?? [];
+      // Invoke once per source in parallel to avoid the 150s edge-function timeout.
+      const responses = await Promise.all(
+        pageResearchSources.map((s: any) =>
+          supabase.functions.invoke("ingest-page-research", { body: { source_id: s.id } })
+        )
+      );
+      const results = responses.flatMap((r) => (r.data as any)?.results ?? []);
       const totalInserted = results.reduce((s: number, r: any) => s + (r.inserted ?? 0), 0);
       const totalFetched = results.reduce((s: number, r: any) => s + (r.fetched ?? 0), 0);
+      const failed = responses.filter((r) => r.error).length;
+      if (failed > 0) toast.warning(`Page Research — ${failed} מקורות נכשלו`);
       toast.success(`Page Research — נמשכו ${totalFetched} · חדשים ${totalInserted}`);
       await Promise.all([refetchRuns(), qc.invalidateQueries({ queryKey: ["items"] })]);
     } catch (e) {
