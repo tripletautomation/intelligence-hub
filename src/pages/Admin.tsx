@@ -222,17 +222,39 @@ const Admin = () => {
           </div>
         </div>
 
-        <LogsMonitoringSection newsRuns={newsRuns} researchRuns={researchRuns} pageEventRuns={pageEventRuns} />
+        <div className="surface-card p-6">
+          <div className="flex items-center justify-between mb-2 gap-4 flex-wrap">
+            <div>
+              <h2 className="text-lg font-bold text-primary">הרצת Page Research ידנית</h2>
+              <p className="text-sm text-muted-foreground">
+                סורק עמודי whitepapers / reports (ללא RSS) דרך Firecrawl ומחלץ פריטי מחקר מובנים עם AI. נשמרים כ-<code className="text-xs">item_type=research</code>.
+              </p>
+            </div>
+            <Button onClick={runPageResearchIngestion} disabled={runningPageResearch || pageResearchSources.length === 0} variant="secondary">
+              {runningPageResearch ? "רץ..." : "הרץ Page Research"}
+            </Button>
+          </div>
+          <div className="text-xs text-muted-foreground mt-2" dir="ltr">
+            Sources: {pageResearchSources.length === 0 ? "none configured" : pageResearchSources.map((s: any) => s.display_name ?? s.name).join(" · ")} · Firecrawl + Lovable AI · Manual only
+          </div>
+        </div>
+
+        <LogsMonitoringSection
+          newsRuns={newsRuns}
+          researchRuns={researchRuns}
+          pageEventRuns={pageEventRuns}
+          pageResearchRuns={pageResearchRuns}
+        />
       </div>
     </AppLayout>
   );
 };
 
 const LogsMonitoringSection = ({
-  newsRuns, researchRuns, pageEventRuns,
-}: { newsRuns: IngestionRun[]; researchRuns: IngestionRun[]; pageEventRuns: IngestionRun[] }) => {
+  newsRuns, researchRuns, pageEventRuns, pageResearchRuns,
+}: { newsRuns: IngestionRun[]; researchRuns: IngestionRun[]; pageEventRuns: IngestionRun[]; pageResearchRuns: IngestionRun[] }) => {
   const [open, setOpen] = useState(false);
-  const allRuns = [...newsRuns, ...researchRuns, ...pageEventRuns].sort(
+  const allRuns = [...newsRuns, ...researchRuns, ...pageEventRuns, ...pageResearchRuns].sort(
     (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime(),
   );
   const last = allRuns[0];
@@ -278,6 +300,7 @@ const LogsMonitoringSection = ({
         <RunsLogCard title="לוג ריצות — News" runs={newsRuns} />
         <RunsLogCard title="לוג ריצות — Research" runs={researchRuns} />
         <RunsLogCard title="לוג ריצות — Page Events" runs={pageEventRuns} />
+        <RunsLogCard title="לוג ריצות — Page Research" runs={pageResearchRuns} />
       </CollapsibleContent>
     </Collapsible>
   );
