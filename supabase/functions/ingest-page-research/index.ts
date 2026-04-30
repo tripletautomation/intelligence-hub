@@ -15,8 +15,8 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
-const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY")!;
+const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY")!;
+const TAVILY_API_KEY = Deno.env.get("TAVILY_API_KEY")!;
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
   auth: { persistSession: false },
@@ -33,29 +33,22 @@ interface ExtractedResearch {
   relevance_score: number;   // 0-100
 }
 
-async function firecrawlScrape(url: string): Promise<{ markdown: string; resolvedUrl: string }> {
-  const res = await fetch("https://api.firecrawl.dev/v2/scrape", {
+async function tavilyScrape(url: string): Promise<{ markdown: string; resolvedUrl: string }> {
+  const res = await fetch("https://api.tavily.com/extract", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      url,
-      formats: ["markdown"],
-      onlyMainContent: true,
-      waitFor: 2500,
-      timeout: 25000,
-      proxy: "stealth",
-      blockAds: true,
+      api_key: TAVILY_API_KEY,
+      urls: [url],
+      extract_depth: "basic",
     }),
   });
 
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Firecrawl http ${res.status}: ${JSON.stringify(data).slice(0, 300)}`);
-  const md: string | undefined = data?.data?.markdown ?? data?.markdown;
-  if (!md) throw new Error("Firecrawl returned no markdown");
-  if (md.length < 500) throw new Error(`Firecrawl returned short markdown (${md.length} chars)`);
+  if (!res.ok) throw new Error(`Tavily extract ${res.status}: ${JSON.stringify(data).slice(0, 300)}`);
+  const md: string | undefined = data?.results?.[0]?.raw_content;
+  if (!md) throw new Error("Tavily returned no content");
+  if (md.length < 500) throw new Error(`Tavily returned short content (${md.length} chars)`);
   return { markdown: md, resolvedUrl: url };
 }
 
@@ -76,14 +69,14 @@ async function extractResearch(
     "Resolve relative URLs against the page URL. source_link must be the canonical landing page of the whitepaper/report.";
   const user = `Page URL: ${pageUrl}\n\nPage markdown (truncated):\n${markdown.slice(0, 30000)}`;
 
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: sys },
         { role: "user", content: user },
@@ -182,7 +175,7 @@ async function ingestPageSource(source: {
   let fetched = 0, inserted = 0, skipped = 0;
 
   try {
-    const { markdown: md, resolvedUrl } = await firecrawlScrape(source.url);
+    const { markdown: md, resolvedUrl } = await tavilyScrape(source.url);
     const debug: { raw?: string; mdLen?: number; finishReason?: string; rawArgs?: string } = {};
     const items = await extractResearch(resolvedUrl, md, debug);
     fetched = items.length;

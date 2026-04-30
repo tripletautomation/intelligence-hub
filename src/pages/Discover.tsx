@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Sparkles, Search, MapPin, Calendar, ExternalLink, Bookmark, BookmarkCheck, Mail, CalendarPlus, Loader2, Globe, Building2 } from "lucide-react";
+import { Sparkles, Search, MapPin, Calendar, ExternalLink, Bookmark, BookmarkCheck, Mail, CalendarPlus, Loader2, Globe, Building2, CalendarCheck, ScanLine } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -82,6 +82,8 @@ const Discover = () => {
   const [format, setFormat] = useState<Format>("any");
   const [results, setResults] = useState<DiscoveredEvent[]>([]);
   const [lastQuery, setLastQuery] = useState("");
+  const [boardAdded, setBoardAdded] = useState<Set<string>>(new Set());
+  const [scannerAdded, setScannerAdded] = useState<Set<string>>(new Set());
 
   const { data: saved = [] } = useQuery({
     enabled: !!user,
@@ -110,7 +112,13 @@ const Discover = () => {
       return data as { events: DiscoveredEvent[]; query: string };
     },
     onSuccess: (data) => {
-      setResults(data.events ?? []);
+      const now = new Date();
+      const futureOnly = (data.events ?? []).filter((ev) => {
+        if (!ev.event_date) return true;
+        const d = new Date(ev.event_date);
+        return isNaN(d.getTime()) || d >= now;
+      });
+      setResults(futureOnly);
       setLastQuery(data.query ?? query);
       if (!data.events?.length) {
         toast({ title: "לא נמצאו אירועים", description: "נסה לנסח מחדש או לשנות פילטרים." });
@@ -118,6 +126,50 @@ const Discover = () => {
     },
     onError: (e: Error) => {
       toast({ title: "שגיאה בחיפוש", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const addToScanner = useMutation({
+    mutationFn: async (ev: DiscoveredEvent) => {
+      const { data, error } = await supabase.functions.invoke("add-source-to-scanner", {
+        body: { name: ev.source_name ?? ev.source_url, url: ev.source_url, category: "events" },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data as { source_id: string; already_existed: boolean };
+    },
+    onSuccess: (data, ev) => {
+      setScannerAdded((prev) => new Set([...prev, ev.source_url]));
+      if (data.already_existed) {
+        toast({ title: "כבר בסורק", description: "האתר כבר רשום כמקור סריקה." });
+      } else {
+        toast({ title: "האתר נוסף לסורק", description: "אירועים עתידיים מאתר זה יסרקו אוטומטית." });
+      }
+    },
+    onError: (e: Error) => {
+      toast({ title: "שגיאה", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const addToBoard = useMutation({
+    mutationFn: async (ev: DiscoveredEvent) => {
+      const { data, error } = await supabase.functions.invoke("add-event-to-board", {
+        body: { event: ev },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data as { item_id: string; already_existed: boolean };
+    },
+    onSuccess: (data, ev) => {
+      setBoardAdded((prev) => new Set([...prev, ev.source_url]));
+      if (data.already_existed) {
+        toast({ title: "כבר קיים בלוח", description: "האירוע כבר נמצא בלוח האירועים שלך." });
+      } else {
+        toast({ title: "נוסף ללוח האירועים", description: "האירוע מופיע כעת בלוח האירועים." });
+      }
+    },
+    onError: (e: Error) => {
+      toast({ title: "שגיאה", description: e.message, variant: "destructive" });
     },
   });
 
@@ -165,7 +217,7 @@ const Discover = () => {
           </div>
           <h1 className="text-2xl md:text-3xl font-bold text-primary mb-1">חיפוש אירועים בעולם</h1>
           <p className="text-sm text-muted-foreground mb-6">
-            גלה כנסים, וובינרים ופאנלים מעבר למקורות הקבועים — מופעל ע״י Firecrawl + AI.
+            גלה כנסים, וובינרים ופאנלים מעבר למקורות הקבועים — מופעל ע״י Tavily + AI.
           </p>
 
           <div className="relative">
@@ -244,6 +296,12 @@ const Discover = () => {
                 ev={ev}
                 isSaved={savedSet.has(ev.source_url)}
                 onSave={() => saveOne.mutate(ev)}
+                isInBoard={boardAdded.has(ev.source_url)}
+                onAddToBoard={() => addToBoard.mutate(ev)}
+                addingToBoard={addToBoard.isPending && addToBoard.variables?.source_url === ev.source_url}
+                isInScanner={scannerAdded.has(ev.source_url)}
+                onAddToScanner={() => addToScanner.mutate(ev)}
+                addingToScanner={addToScanner.isPending && addToScanner.variables?.source_url === ev.source_url}
               />
             ))}
           </div>
@@ -254,8 +312,13 @@ const Discover = () => {
 };
 
 const ResultCard = ({
-  ev, isSaved, onSave,
-}: { ev: DiscoveredEvent; isSaved: boolean; onSave: () => void }) => {
+  ev, isSaved, onSave, isInBoard, onAddToBoard, addingToBoard,
+  isInScanner, onAddToScanner, addingToScanner,
+}: {
+  ev: DiscoveredEvent; isSaved: boolean; onSave: () => void;
+  isInBoard: boolean; onAddToBoard: () => void; addingToBoard: boolean;
+  isInScanner: boolean; onAddToScanner: () => void; addingToScanner: boolean;
+}) => {
   return (
     <Card className="p-5 flex flex-col gap-3 hover:shadow-md transition-shadow border-border bg-card">
       <div className="flex items-start justify-between gap-3">
@@ -303,6 +366,26 @@ const ResultCard = ({
           <a href={toMailtoUrl(ev)}>
             <Mail className="h-3.5 w-3.5" /> שלח במייל
           </a>
+        </Button>
+        <Button
+          size="sm"
+          variant={isInBoard ? "secondary" : "outline"}
+          onClick={onAddToBoard}
+          disabled={isInBoard || addingToBoard}
+          className="gap-1.5 ml-auto"
+        >
+          {addingToBoard ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarCheck className="h-3.5 w-3.5" />}
+          {isInBoard ? "בלוח האירועים" : "הוסף ללוח"}
+        </Button>
+        <Button
+          size="sm"
+          variant={isInScanner ? "secondary" : "ghost"}
+          onClick={onAddToScanner}
+          disabled={isInScanner || addingToScanner}
+          className="gap-1.5"
+        >
+          {addingToScanner ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ScanLine className="h-3.5 w-3.5" />}
+          {isInScanner ? "בסורק ✓" : "הוסף אתר לסורק"}
         </Button>
       </div>
     </Card>

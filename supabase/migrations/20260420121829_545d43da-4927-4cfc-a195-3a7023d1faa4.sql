@@ -92,10 +92,7 @@ CREATE POLICY "admins delete sources" ON public.sources
   FOR DELETE TO authenticated
   USING (public.has_role(auth.uid(), 'admin'));
 
--- 6. Grant the founding user the admin role
-INSERT INTO public.user_roles (user_id, role)
-VALUES ('e8bbb227-e898-4be1-aeee-5a5285b7c2d1', 'admin')
-ON CONFLICT (user_id, role) DO NOTHING;
+-- 6. (First admin is granted manually after signup via the Dashboard or SQL Editor)
 
 -- 7. Backfill status for existing sources: those with rss_url + active → valid, else pending
 UPDATE public.sources

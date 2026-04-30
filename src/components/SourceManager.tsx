@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { forwardRef, useImperativeHandle, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -48,8 +48,8 @@ interface SourceRow {
 const sourceSchema = z.object({
   name: z.string().trim().min(1, "שם חובה").max(120),
   display_name: z.string().trim().max(120).optional().or(z.literal("")),
-  type: z.string().trim().max(40).optional().or(z.literal("")),
-  category: z.string().trim().max(60).optional().or(z.literal("")),
+  type: z.enum(["rss", "page", "news", ""]).optional(),
+  category: z.enum(["industry_news", "events", "research", ""]).optional(),
   region: z.enum(["israel", "global"]).optional().or(z.literal("")),
   url: z.string().trim().url("URL לא תקין").max(500).optional().or(z.literal("")),
   rss_url: z.string().trim().url("RSS URL לא תקין").max(500).optional().or(z.literal("")),
@@ -71,7 +71,12 @@ const emptyForm: FormState = {
   notes: "",
 };
 
-export const SourceManager = ({ onRunSource }: { onRunSource: (sourceId: string) => Promise<void> }) => {
+export interface SourceManagerHandle {
+  openCreate: (prefill?: Partial<FormState>) => void;
+}
+
+export const SourceManager = forwardRef<SourceManagerHandle, { onRunSource: (sourceId: string) => Promise<void> }>(
+({ onRunSource }, ref) => {
   const qc = useQueryClient();
   const { data: sources = [] } = useSources() as { data: SourceRow[] };
   const { data: isAdmin = false, isLoading: roleLoading } = useIsAdmin();
@@ -97,12 +102,14 @@ export const SourceManager = ({ onRunSource }: { onRunSource: (sourceId: string)
       );
   }, [sources, showArchived]);
 
-  const openCreate = () => {
+  const openCreate = (prefill?: Partial<FormState>) => {
     setEditing(null);
-    setForm(emptyForm);
+    setForm(prefill ? { ...emptyForm, ...prefill } : emptyForm);
     setDetectResult(null);
     setCreating(true);
   };
+
+  useImperativeHandle(ref, () => ({ openCreate }));
   const openEdit = (s: SourceRow) => {
     setEditing(s);
     setForm({
@@ -347,12 +354,31 @@ export const SourceManager = ({ onRunSource }: { onRunSource: (sourceId: string)
             <Field label="שם תצוגה">
               <Input value={form.display_name ?? ""} onChange={(e) => setForm({ ...form, display_name: e.target.value })} maxLength={120} />
             </Field>
-            <Field label="סוג (source_type)">
-              <Input value={form.type ?? ""} onChange={(e) => setForm({ ...form, type: e.target.value })} placeholder="news / events / research" maxLength={40} />
+            <Field label="סוג מקור">
+              <Select value={form.type ?? ""} onValueChange={(v) => setForm({ ...form, type: v as any })}>
+                <SelectTrigger><SelectValue placeholder="בחר סוג" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="rss">RSS Feed</SelectItem>
+                  <SelectItem value="page">עמוד (ללא RSS)</SelectItem>
+                  <SelectItem value="news">חדשות / News API</SelectItem>
+                </SelectContent>
+              </Select>
             </Field>
-            <Field label="קטגוריה (source_category)">
-              <Input value={form.category ?? ""} onChange={(e) => setForm({ ...form, category: e.target.value })} maxLength={60} />
+            <Field label="קטגוריה">
+              <Select value={form.category ?? ""} onValueChange={(v) => setForm({ ...form, category: v as any })}>
+                <SelectTrigger><SelectValue placeholder="בחר קטגוריה" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="industry_news">חדשות תעשייה</SelectItem>
+                  <SelectItem value="events">אירועים</SelectItem>
+                  <SelectItem value="research">מחקר</SelectItem>
+                </SelectContent>
+              </Select>
             </Field>
+            {form.type === "page" && (
+              <div className="col-span-2 text-[11px] text-blue-700 bg-blue-50 border border-blue-200 rounded px-2.5 py-2">
+                מקורות מסוג <strong>page</strong> לא דורשים RSS URL — יסרקו אוטומטית ע״י "הרצת Page Events" / "הרצת Page Research" בהתאם לקטגוריה.
+              </div>
+            )}
             <Field label="אזור">
               <Select
                 value={(form.region as string) || ""}
@@ -415,7 +441,8 @@ export const SourceManager = ({ onRunSource }: { onRunSource: (sourceId: string)
       </Dialog>
     </>
   );
-};
+});
+SourceManager.displayName = "SourceManager";
 
 const Field = ({ label, children, required, full }: { label: string; children: React.ReactNode; required?: boolean; full?: boolean }) => (
   <div className={cn("space-y-1", full && "col-span-2")}>

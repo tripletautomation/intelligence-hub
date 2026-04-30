@@ -1,18 +1,182 @@
-import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRef, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useSources, useItems } from "@/hooks/useIntelligence";
 import { toast } from "sonner";
 import { formatHeRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { SourceManager } from "@/components/SourceManager";
+import { SourceManager, type SourceManagerHandle } from "@/components/SourceManager";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Search, Globe2, Loader2, Rss, FileText, CalendarDays } from "lucide-react";
 import { UserAccessManager } from "@/components/UserAccessManager";
-import { ChevronDown, AlertTriangle, Activity } from "lucide-react";
+import { ChevronDown, AlertTriangle, Activity, BrainCircuit, Save } from "lucide-react";
+
+// ─── AI Provider / Model catalogue ───────────────────────────────────────────
+const AI_PROVIDERS = [
+  {
+    id: "anthropic",
+    label: "Anthropic (Claude)",
+    envKey: "ANTHROPIC_API_KEY",
+    models: [
+      { id: "claude-opus-4-7", label: "Claude Opus 4.7 — הכי חזק" },
+      { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6 — מהיר ויכולת גבוהה" },
+      { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 — מהיר וזול" },
+    ],
+  },
+  {
+    id: "openai",
+    label: "OpenAI",
+    envKey: "OPENAI_API_KEY",
+    models: [
+      { id: "gpt-4.1", label: "GPT-4.1 — הכי חזק (מומלץ לכתיבה)" },
+      { id: "gpt-4o", label: "GPT-4o" },
+      { id: "gpt-4o-mini", label: "GPT-4o mini — מהיר וזול" },
+      { id: "gpt-4.1-mini", label: "GPT-4.1 mini — מהיר וזול" },
+    ],
+  },
+  {
+    id: "lovable",
+    label: "Lovable AI Gateway (ברירת מחדל)",
+    envKey: "LOVABLE_API_KEY",
+    models: [
+      { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+      { id: "openai/gpt-4o", label: "GPT-4o via Gateway" },
+    ],
+  },
+];
+
+interface AiConfig { provider: string; model_id: string; }
+
+const SingleAiConfig = ({
+  configId,
+  label,
+  description,
+  defaultProvider,
+  defaultModel,
+}: {
+  configId: string;
+  label: string;
+  description: string;
+  defaultProvider: string;
+  defaultModel: string;
+}) => {
+  const qc = useQueryClient();
+  const queryKey = ["ai_config", configId];
+
+  const { data: config, isLoading } = useQuery<AiConfig>({
+    queryKey,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("ai_config").select("provider,model_id").eq("id", configId).maybeSingle();
+      if (error) throw error;
+      return data ?? { provider: defaultProvider, model_id: defaultModel };
+    },
+  });
+
+  const [provider, setProvider] = useState<string | null>(null);
+  const [modelId, setModelId] = useState<string | null>(null);
+
+  const activeProvider = provider ?? config?.provider ?? defaultProvider;
+  const activeModel = modelId ?? config?.model_id ?? defaultModel;
+  const providerDef = AI_PROVIDERS.find((p) => p.id === activeProvider) ?? AI_PROVIDERS[1];
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const { error } = await (supabase as any)
+        .from("ai_config")
+        .upsert({ id: configId, provider: activeProvider, model_id: activeModel, updated_at: new Date().toISOString() });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("הגדרות נשמרו");
+      qc.invalidateQueries({ queryKey });
+      setProvider(null);
+      setModelId(null);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const isDirty = (provider !== null && provider !== config?.provider) ||
+    (modelId !== null && modelId !== config?.model_id);
+
+  if (isLoading) return <div className="text-sm text-muted-foreground">טוען...</div>;
+
+  return (
+    <div className="rounded-lg border border-border p-4 space-y-3">
+      <div>
+        <p className="text-sm font-medium text-primary">{label}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      <div className="grid md:grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">ספק AI</Label>
+          <Select value={activeProvider} onValueChange={(v) => { setProvider(v); setModelId(AI_PROVIDERS.find(p => p.id === v)?.models[0]?.id ?? null); }}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {AI_PROVIDERS.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">מודל</Label>
+          <Select value={activeModel} onValueChange={setModelId}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {providerDef.models.map((m) => (
+                <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] text-muted-foreground/70 font-mono">Secret: {providerDef.envKey}</span>
+        <Button size="sm" variant="outline" disabled={!isDirty || save.isPending} onClick={() => save.mutate()} className="gap-1.5 h-7 text-xs">
+          <Save className="h-3 w-3" />
+          {save.isPending ? "שומר..." : "שמור"}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+const AiConfigSection = () => (
+  <div className="surface-card p-6">
+    <div className="flex items-center gap-2 mb-1">
+      <BrainCircuit className="h-5 w-5 text-accent" />
+      <h2 className="text-lg font-bold text-primary">הגדרות מודל AI</h2>
+    </div>
+    <p className="text-sm text-muted-foreground mb-4">
+      הגדר מודל נפרד לכתיבת מאמרים ולחיפוש/סיכום. ניתן לשנות בכל עת.
+    </p>
+    <div className="space-y-3">
+      <SingleAiConfig
+        configId="article"
+        label="מודל כתיבת מאמרים"
+        description="משמש ליצירת מאמרים מלאים. מומלץ: GPT-4.1 לאיכות כתיבה גבוהה."
+        defaultProvider="openai"
+        defaultModel="gpt-4.1"
+      />
+      <SingleAiConfig
+        configId="default"
+        label="מודל חיפוש וסיכומים"
+        description="משמש לחיפוש מקורות, סיכום חדשות, רשתות חברתיות ועיבוד רקע. מומלץ: GPT-4o mini לחיסכון בעלויות."
+        defaultProvider="openai"
+        defaultModel="gpt-4o-mini"
+      />
+    </div>
+  </div>
+);
 
 interface IngestionRun {
   id: string;
@@ -28,6 +192,25 @@ interface IngestionRun {
   triggered_by: string;
 }
 
+interface DiscoveredSource {
+  name: string;
+  url: string;
+  description_he: string;
+  suggested_type: "rss" | "page";
+  suggested_category: "industry_news" | "events" | "research" | "other";
+  rss_url: string | null;
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  industry_news: "חדשות", events: "אירועים", research: "מחקר", other: "אחר",
+};
+const CATEGORY_ICONS: Record<string, React.ReactNode> = {
+  industry_news: <Globe2 className="h-3 w-3" />,
+  events: <CalendarDays className="h-3 w-3" />,
+  research: <FileText className="h-3 w-3" />,
+  other: <Globe2 className="h-3 w-3" />,
+};
+
 const Admin = () => {
   const qc = useQueryClient();
   const { data: sources = [] } = useSources();
@@ -37,6 +220,27 @@ const Admin = () => {
   const [runningPageEvents, setRunningPageEvents] = useState(false);
   const [runningPageResearch, setRunningPageResearch] = useState(false);
   const [hideSeed, setHideSeed] = useState(() => localStorage.getItem("hideSeed") === "1");
+
+  // Source Discovery
+  const sourceManagerRef = useRef<SourceManagerHandle>(null);
+  const [discoverQuery, setDiscoverQuery] = useState("");
+  const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [discoveredSources, setDiscoveredSources] = useState<DiscoveredSource[]>([]);
+
+  const runDiscover = async () => {
+    if (!discoverQuery.trim()) return;
+    setDiscoverLoading(true);
+    setDiscoveredSources([]);
+    try {
+      const { data, error } = await supabase.functions.invoke("discover-sources", {
+        body: { query: discoverQuery, limit: 10 },
+      });
+      if (error) throw error;
+      setDiscoveredSources((data as any)?.sources ?? []);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה בחיפוש מקורות");
+    } finally { setDiscoverLoading(false); }
+  };
 
   const realSources = sources.filter((s: any) => !s.is_seed && s.rss_url);
   const pageEventSources = sources.filter((s: any) => s.type === "page" && s.category === "events" && s.active);
@@ -77,11 +281,12 @@ const Admin = () => {
       const results = (data as any)?.results ?? [];
       const totalInserted = results.reduce((s: number, r: any) => s + (r.inserted ?? 0), 0);
       toast.success(`הריצה הסתיימה — ${totalInserted} פריטים חדשים נוספו`);
-      await Promise.all([refetchRuns(), qc.invalidateQueries({ queryKey: ["items"] })]);
+      qc.invalidateQueries({ queryKey: ["items"] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "שגיאה בריצה");
     } finally {
       setRunning(false);
+      refetchRuns();
     }
   };
 
@@ -102,11 +307,12 @@ const Admin = () => {
         `Research — נמשכו ${fet} · חדשים ${ins} · קודמו מ-news ${prom} · דולגו ${skip}` +
         (b ? ` (כבר research: ${b.already_research ?? 0}, לא-מחקר: ${b.not_research ?? 0})` : "")
       );
-      await Promise.all([refetchRuns(), qc.invalidateQueries({ queryKey: ["items"] })]);
+      qc.invalidateQueries({ queryKey: ["items"] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "שגיאה בריצת Research");
     } finally {
       setRunningResearch(false);
+      refetchRuns();
     }
   };
 
@@ -119,18 +325,18 @@ const Admin = () => {
       const totalInserted = results.reduce((s: number, r: any) => s + (r.inserted ?? 0), 0);
       const totalFetched = results.reduce((s: number, r: any) => s + (r.fetched ?? 0), 0);
       toast.success(`Page Events — נמשכו ${totalFetched} · חדשים ${totalInserted}`);
-      await Promise.all([refetchRuns(), qc.invalidateQueries({ queryKey: ["items"] })]);
+      qc.invalidateQueries({ queryKey: ["items"] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "שגיאה בריצת Page Events");
     } finally {
       setRunningPageEvents(false);
+      refetchRuns();
     }
   };
 
   const runPageResearchIngestion = async () => {
     setRunningPageResearch(true);
     try {
-      // Invoke once per source in parallel to avoid the 150s edge-function timeout.
       const responses = await Promise.all(
         pageResearchSources.map((s: any) =>
           supabase.functions.invoke("ingest-page-research", { body: { source_id: s.id } })
@@ -142,11 +348,12 @@ const Admin = () => {
       const failed = responses.filter((r) => r.error).length;
       if (failed > 0) toast.warning(`Page Research — ${failed} מקורות נכשלו`);
       toast.success(`Page Research — נמשכו ${totalFetched} · חדשים ${totalInserted}`);
-      await Promise.all([refetchRuns(), qc.invalidateQueries({ queryKey: ["items"] })]);
+      qc.invalidateQueries({ queryKey: ["items"] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "שגיאה בריצת Page Research");
     } finally {
       setRunningPageResearch(false);
+      refetchRuns();
     }
   };
 
@@ -159,6 +366,8 @@ const Admin = () => {
   return (
     <AppLayout>
       <div className="max-w-5xl space-y-6">
+        <AiConfigSection />
+
         <div className="surface-card p-6">
           <h2 className="text-lg font-bold text-primary mb-1">מצב נתונים</h2>
           <p className="text-sm text-muted-foreground mb-4">סקירה של seed מול תוכן אמיתי שהוטמע</p>
@@ -190,7 +399,67 @@ const Admin = () => {
           </div>
         </div>
 
-        <SourceManager onRunSource={(id) => runIngestion(id)} />
+        {/* Source Discovery */}
+        <div className="surface-card p-6 space-y-4">
+          <div className="flex items-center gap-2">
+            <Search className="h-5 w-5 text-accent" />
+            <div>
+              <h2 className="text-lg font-bold text-primary">גלה מקורות חדשים</h2>
+              <p className="text-sm text-muted-foreground">חפש באינטרנט מקורות רלוונטיים והוסף אותם לרשימה</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Input
+              placeholder="לדוגמה: data center events Israel, cloud infrastructure news..."
+              value={discoverQuery}
+              onChange={(e) => setDiscoverQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && runDiscover()}
+              className="flex-1"
+              dir="auto"
+            />
+            <Button onClick={runDiscover} disabled={discoverLoading || !discoverQuery.trim()} className="gap-1.5">
+              {discoverLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              {discoverLoading ? "מחפש..." : "חפש"}
+            </Button>
+          </div>
+          {discoveredSources.length > 0 && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {discoveredSources.map((s) => (
+                <Card key={s.url} className="p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm truncate">{s.name}</div>
+                      <div className="text-xs text-muted-foreground truncate" dir="ltr">{s.url}</div>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <Badge variant="secondary" className="text-[10px] gap-1">
+                        {s.suggested_type === "rss" ? <Rss className="h-2.5 w-2.5" /> : <Globe2 className="h-2.5 w-2.5" />}
+                        {s.suggested_type}
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px] gap-1">
+                        {CATEGORY_ICONS[s.suggested_category]}
+                        {CATEGORY_LABELS[s.suggested_category] ?? s.suggested_category}
+                      </Badge>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground line-clamp-2">{s.description_he}</p>
+                  <Button size="sm" variant="outline" className="w-full h-7 text-xs gap-1.5"
+                    onClick={() => sourceManagerRef.current?.openCreate({
+                      name: s.name,
+                      url: s.url,
+                      rss_url: s.rss_url ?? "",
+                      type: s.suggested_type === "rss" ? "rss" : "page",
+                      category: s.suggested_category !== "other" ? s.suggested_category : "",
+                    })}>
+                    <Search className="h-3 w-3" /> הוסף מקור
+                  </Button>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <SourceManager ref={sourceManagerRef} onRunSource={(id) => runIngestion(id)} />
 
         <UserAccessManager />
 
@@ -216,7 +485,7 @@ const Admin = () => {
             <div>
               <h2 className="text-lg font-bold text-primary">הרצת Page Events ידנית</h2>
               <p className="text-sm text-muted-foreground">
-                סורק עמודי אירועים (ללא RSS) דרך Firecrawl ומחלץ אירועים מובנים עם AI. נשמרים כ-<code className="text-xs">item_type=event</code>.
+                סורק עמודי אירועים (ללא RSS) דרך Tavily ומחלץ אירועים מובנים עם AI. נשמרים כ-<code className="text-xs">item_type=event</code>.
               </p>
             </div>
             <Button onClick={runPageEventsIngestion} disabled={runningPageEvents || pageEventSources.length === 0} variant="secondary">
@@ -224,7 +493,7 @@ const Admin = () => {
             </Button>
           </div>
           <div className="text-xs text-muted-foreground mt-2" dir="ltr">
-            Sources: {pageEventSources.length === 0 ? "none configured" : pageEventSources.map((s: any) => s.display_name ?? s.name).join(" · ")} · Firecrawl + Lovable AI · Manual only
+            Sources: {pageEventSources.length === 0 ? "none configured" : pageEventSources.map((s: any) => s.display_name ?? s.name).join(" · ")} · Tavily + OpenAI · Manual only
           </div>
         </div>
 
@@ -233,7 +502,7 @@ const Admin = () => {
             <div>
               <h2 className="text-lg font-bold text-primary">הרצת Page Research ידנית</h2>
               <p className="text-sm text-muted-foreground">
-                סורק עמודי whitepapers / reports (ללא RSS) דרך Firecrawl ומחלץ פריטי מחקר מובנים עם AI. נשמרים כ-<code className="text-xs">item_type=research</code>.
+                סורק עמודי whitepapers / reports (ללא RSS) דרך Tavily ומחלץ פריטי מחקר מובנים עם AI. נשמרים כ-<code className="text-xs">item_type=research</code>.
               </p>
             </div>
             <Button onClick={runPageResearchIngestion} disabled={runningPageResearch || pageResearchSources.length === 0} variant="secondary">
@@ -241,7 +510,7 @@ const Admin = () => {
             </Button>
           </div>
           <div className="text-xs text-muted-foreground mt-2" dir="ltr">
-            Sources: {pageResearchSources.length === 0 ? "none configured" : pageResearchSources.map((s: any) => s.display_name ?? s.name).join(" · ")} · Firecrawl + Lovable AI · Manual only
+            Sources: {pageResearchSources.length === 0 ? "none configured" : pageResearchSources.map((s: any) => s.display_name ?? s.name).join(" · ")} · Tavily + OpenAI · Manual only
           </div>
         </div>
 
@@ -259,7 +528,7 @@ const Admin = () => {
 const LogsMonitoringSection = ({
   newsRuns, researchRuns, pageEventRuns, pageResearchRuns,
 }: { newsRuns: IngestionRun[]; researchRuns: IngestionRun[]; pageEventRuns: IngestionRun[]; pageResearchRuns: IngestionRun[] }) => {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const allRuns = [...newsRuns, ...researchRuns, ...pageEventRuns, ...pageResearchRuns].sort(
     (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime(),
   );

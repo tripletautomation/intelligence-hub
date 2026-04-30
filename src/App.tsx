@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
 import { RequireAuth } from "@/components/RequireAuth";
+import { RequireAdmin } from "@/components/RequireAdmin";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Archive from "./pages/Archive";
@@ -32,7 +33,7 @@ const App = () => (
             <Route path="/events" element={<RequireAuth><Events /></RequireAuth>} />
             <Route path="/discover" element={<RequireAuth><Discover /></RequireAuth>} />
             <Route path="/preferences" element={<RequireAuth><Preferences /></RequireAuth>} />
-            <Route path="/admin" element={<RequireAuth><Admin /></RequireAuth>} />
+            <Route path="/admin" element={<RequireAdmin><Admin /></RequireAdmin>} />
             <Route path="/drafts" element={<RequireAuth><Drafts /></RequireAuth>} />
             <Route path="/drafts/:id" element={<RequireAuth><DraftDetail /></RequireAuth>} />
             <Route path="*" element={<NotFound />} />

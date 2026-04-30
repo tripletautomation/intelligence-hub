@@ -15,8 +15,8 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
-const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY")!;
+const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY")!;
+const TAVILY_API_KEY = Deno.env.get("TAVILY_API_KEY")!;
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
   auth: { persistSession: false },
@@ -33,7 +33,63 @@ interface ExtractedEvent {
   title_he: string;
 }
 
-async function firecrawlScrape(url: string): Promise<{ markdown: string; resolvedUrl: string }> {
+function isUsableContent(md: string): boolean {
+  if (!md || md.length < 300) return false;
+  const n = md.replace(/\s+/g, " ").trim().toLowerCase();
+  if (n.includes("sorry, we couldn't find this page")) return false;
+  if (n.includes("page not found")) return false;
+  return true;
+}
+
+async function tavilyExtract(urls: string[]): Promise<{ markdown: string; resolvedUrl: string } | null> {
+  const res = await fetch("https://api.tavily.com/extract", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      api_key: TAVILY_API_KEY,
+      urls,
+      extract_depth: "advanced", // JS-heavy sites need advanced rendering
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return null;
+  const results: Array<{ url: string; raw_content: string }> = data?.results ?? [];
+  for (const result of results) {
+    if (isUsableContent(result.raw_content)) {
+      return { markdown: result.raw_content, resolvedUrl: result.url };
+    }
+  }
+  return null;
+}
+
+async function tavilySearchFallback(sourceName: string, sourceUrl: string): Promise<{ markdown: string; resolvedUrl: string } | null> {
+  // Extract hostname to build a site-specific query
+  let hostname = sourceUrl;
+  try { hostname = new URL(sourceUrl).hostname.replace(/^www\./, ""); } catch { /* keep as-is */ }
+  const query = `${sourceName} upcoming events 2025 2026 site:${hostname}`;
+  const res = await fetch("https://api.tavily.com/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      api_key: TAVILY_API_KEY,
+      query,
+      search_depth: "advanced",
+      max_results: 10,
+      include_raw_content: true,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return null;
+  const results: Array<{ url: string; raw_content?: string; content?: string }> = data?.results ?? [];
+  // Combine all result snippets into one markdown blob for the AI to parse
+  const combined = results
+    .map((r) => `=== ${r.url} ===\n${r.raw_content || r.content || ""}`)
+    .join("\n\n");
+  if (!combined || combined.length < 200) return null;
+  return { markdown: combined, resolvedUrl: sourceUrl };
+}
+
+async function tavilyScrape(url: string, sourceName: string): Promise<{ markdown: string; resolvedUrl: string }> {
   const candidates = [url];
   try {
     const parsed = new URL(url);
@@ -44,67 +100,25 @@ async function firecrawlScrape(url: string): Promise<{ markdown: string; resolve
       );
     }
     if (parsed.hostname.includes("idca.org.il")) {
-      // IDCA exposes both an EN and HE events page; some events appear only on one.
       candidates.push(
         "https://www.idca.org.il/en/events",
         "https://www.idca.org.il/events",
+        "https://idca.org.il/en/events",
       );
     }
-  } catch {
-    // ignore invalid source URL and let the original request fail below
-  }
+  } catch { /* ignore invalid URL */ }
 
-  const seen = new Set<string>();
-  const attempts: string[] = [];
+  const uniqueCandidates = [...new Set(candidates)];
 
-  for (const candidate of candidates) {
-    if (!candidate || seen.has(candidate)) continue;
-    seen.add(candidate);
+  // 1. Try direct extract with advanced rendering
+  const extracted = await tavilyExtract(uniqueCandidates);
+  if (extracted) return extracted;
 
-    const res = await fetch("https://api.firecrawl.dev/v2/scrape", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        url: candidate,
-        formats: ["markdown"],
-        // IDCA hides next-month cards behind tabs / lazy sections that live outside main content.
-        onlyMainContent: false,
-        waitFor: 5000,
-        timeout: 35000,
-        proxy: "stealth",
-        blockAds: true,
-      }),
-    });
+  // 2. Fallback: search-based scrape (works when extract can't render JS pages)
+  const searchResult = await tavilySearchFallback(sourceName, url);
+  if (searchResult) return searchResult;
 
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      attempts.push(`${candidate} -> http ${res.status}`);
-      continue;
-    }
-
-    const md: string | undefined = data?.data?.markdown ?? data?.markdown;
-    if (!md) {
-      attempts.push(`${candidate} -> no markdown`);
-      continue;
-    }
-
-    const normalized = md.replace(/\s+/g, " ").trim().toLowerCase();
-    if (normalized.includes("sorry, we couldn't find this page")) {
-      attempts.push(`${candidate} -> 404 page`);
-      continue;
-    }
-    if (md.length < 500) {
-      attempts.push(`${candidate} -> short markdown (${md.length} chars)`);
-      continue;
-    }
-
-    return { markdown: md, resolvedUrl: candidate };
-  }
-
-  throw new Error(`Firecrawl failed for all candidates: ${attempts.join(" | ").slice(0, 500)}`);
+  throw new Error(`Could not get usable content for: ${uniqueCandidates[0]}`);
 }
 
 async function extractEvents(
@@ -120,29 +134,33 @@ async function extractEvents(
     .split(/\n+/)
     .filter((l) => l.length > 8 && (monthRx.test(l) || dateRx.test(l)))
     .length;
+  const today = new Date().toISOString().split("T")[0]; // e.g. 2026-04-30
+  const cutoffDate = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
   const sys =
     "You extract structured event records from a scraped events listing page (markdown). " +
-    "The page may contain MULTIPLE sections such as 'This month', 'Upcoming', 'Next month', 'Future events', 'Past events', tabs, or carousels. " +
-    "EXTRACT EVERY CONCRETE EVENT from ALL sections — do NOT stop at the first section, the first month, or the first visible block. " +
-    "Include all upcoming/future events, even those several months away. Include past events too if they appear with a real date — categorization happens later. " +
-    "Skip navigation, cookie banners, ads, footers, generic news articles, and marketing copy without a date or registration. " +
+    `Today's date is ${today}. ` +
+    `Extract ONLY events scheduled between ${cutoffDate} (60 days ago) and 12 months from now. ` +
+    "CRITICAL: Pages often have an 'Upcoming' section followed by an 'Archive', 'Past Events', or 'Webinar Archive' section. " +
+    "Extract from the UPCOMING section only. When you encounter a section header containing words like 'Archive', 'Past', 'Historical', 'Previous' — STOP and do not extract further. " +
+    "The page may have multiple upcoming sections like 'This month', 'Next month', 'Future events' — include all of them. " +
+    "Skip navigation, cookie banners, ads, footers, generic news articles, and marketing copy without a date or registration link. " +
     "Translate title and summary to Hebrew. Provide a 1-sentence Hebrew 'why it matters' for an Israeli data-center professional. " +
-    "If event_date is unknown or ambiguous, set it to null. Use ISO 8601 with timezone if possible. " +
-    "Resolve relative URLs against the page URL. " +
-    "Aim for completeness: it is better to return 15 events than to return only 3.";
+    "If event_date is unknown or ambiguous but the event clearly seems upcoming, set event_date to null and still include it. " +
+    "Use ISO 8601 with timezone if possible. Resolve relative URLs against the page URL. " +
+    "Aim for completeness: it is better to return 15 future events than only 3.";
   // Send more of the page so later sections (next month, future) are not truncated away.
   const mdToSend = markdown.slice(0, 60000);
   debug.mdSentLen = mdToSend.length;
-  const user = `Page URL: ${pageUrl}\n\nPage markdown:\n${mdToSend}`;
+  const user = `Today's date: ${today}\nPage URL: ${pageUrl}\n\nPage markdown:\n${mdToSend}`;
 
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: sys },
         { role: "user", content: user },
@@ -234,7 +252,7 @@ async function ingestPageSource(source: {
   let fetched = 0, inserted = 0, skipped = 0;
 
   try {
-    const { markdown: md, resolvedUrl } = await firecrawlScrape(source.url);
+    const { markdown: md, resolvedUrl } = await tavilyScrape(source.url, source.name);
     const debug: { raw?: string; mdLen?: number; finishReason?: string; rawArgs?: string; mdSentLen?: number; candidateCount?: number } = {};
     const events = await extractEvents(resolvedUrl, md, debug);
     fetched = events.length;
@@ -251,12 +269,25 @@ async function ingestPageSource(source: {
         message: `No events extracted. md_len=${debug.mdLen} finish=${debug.finishReason} raw=${debug.raw ?? ""} args=${debug.rawArgs ?? ""}`,
       });
     }
+    const now = new Date();
+    // Allow events up to 60 days in the past (still relevant/recent)
+    const cutoff = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+
     for (const ev of events) {
       try {
         if (!ev.source_link || !ev.title_he) {
           skipped++;
           errors.push({ stage: "skip-missing-fields", url: ev.source_link, message: `missing source_link or title_he (title="${ev.title ?? ""}")` });
           continue;
+        }
+        // Skip events older than 60 days
+        if (ev.event_date) {
+          const evDate = new Date(ev.event_date);
+          if (!isNaN(evDate.getTime()) && evDate < cutoff) {
+            skipped++;
+            errors.push({ stage: "skip-past-event", url: ev.source_link, message: `event_date ${ev.event_date} is older than 60 days` });
+            continue;
+          }
         }
         const { data: existing } = await admin
           .from("items")

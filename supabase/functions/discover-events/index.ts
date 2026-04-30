@@ -12,8 +12,8 @@ const corsHeaders = {
 };
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
-const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY")!;
+const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY")!;
+const TAVILY_API_KEY = Deno.env.get("TAVILY_API_KEY")!;
 
 interface DiscoveredEvent {
   title: string;
@@ -48,64 +48,60 @@ function buildSearchQuery(p: FilterPayload): string {
   return parts.filter(Boolean).join(" ");
 }
 
-async function firecrawlSearch(query: string, limit: number) {
-  const res = await fetch("https://api.firecrawl.dev/v2/search", {
+async function tavilySearch(query: string, limit: number) {
+  const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      api_key: TAVILY_API_KEY,
       query,
-      limit: Math.min(Math.max(limit, 5), 20),
-      scrapeOptions: {
-        formats: ["markdown"],
-        onlyMainContent: true,
-      },
+      search_depth: "basic",
+      max_results: Math.min(Math.max(limit, 5), 20),
+      include_raw_content: false,
     }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(`Firecrawl ${res.status}: ${JSON.stringify(data).slice(0, 300)}`);
-  }
-  // v2 returns { data: { web: [...] } } or { data: [...] }; normalize.
-  const web = data?.data?.web ?? data?.data ?? [];
-  return Array.isArray(web) ? web : [];
+  if (!res.ok) throw new Error(`Tavily ${res.status}: ${JSON.stringify(data).slice(0, 300)}`);
+  const results = data?.results ?? [];
+  return Array.isArray(results) ? results : [];
 }
 
 async function extractEvents(
   userQuery: string,
-  results: Array<{ url?: string; title?: string; description?: string; markdown?: string }>,
+  results: Array<{ url?: string; title?: string; content?: string }>,
 ): Promise<DiscoveredEvent[]> {
   const compact = results
     .slice(0, 12)
     .map((r, i) => {
-      const md = (r.markdown ?? "").slice(0, 4000);
-      return `--- RESULT ${i + 1} ---\nURL: ${r.url ?? ""}\nTITLE: ${r.title ?? ""}\nDESC: ${r.description ?? ""}\nCONTENT:\n${md}`;
+      const content = (r.content ?? "").slice(0, 4000);
+      return `--- RESULT ${i + 1} ---\nURL: ${r.url ?? ""}\nTITLE: ${r.title ?? ""}\nCONTENT:\n${content}`;
     })
     .join("\n\n");
 
+  const today = new Date().toISOString().split("T")[0];
   const sys =
     "You convert web search results into structured EVENT records (conferences, summits, webinars, broadcasts, meetups). " +
+    `Today's date is ${today}. ` +
     "Strict rules: " +
-    "1) ONLY extract real upcoming or recently announced events that someone could attend or watch. " +
-    "2) Skip news articles, blog posts, vendor product pages, generic landing pages, archives of past unrelated events. " +
-    "3) Translate title/summary to Hebrew. " +
-    "4) why_it_matters: one short Hebrew sentence explaining relevance to an Israeli data-center / IT infrastructure professional given the user's query. " +
-    "5) event_date: ISO 8601 with timezone if known, else null. Do NOT invent dates. " +
-    "6) source_url MUST be the absolute URL of the result. source_name = publisher / organizer brand. " +
-    "7) Return at most 10 high-quality events.";
+    `1) ONLY extract events whose date is AFTER ${today} (i.e. future events). If an event clearly has a past date, skip it entirely. ` +
+    "2) If a page has an 'Upcoming' section AND an 'Archive'/'Past' section, extract ONLY from the Upcoming section. " +
+    "3) Skip news articles, blog posts, vendor product pages, generic landing pages, archives of past events. " +
+    "4) Translate title/summary to Hebrew. " +
+    "5) why_it_matters: one short Hebrew sentence explaining relevance to an Israeli data-center / IT infrastructure professional given the user's query. " +
+    "6) event_date: ISO 8601 with timezone if known, else null. Do NOT invent dates. " +
+    "7) source_url MUST be the absolute URL of the result. source_name = publisher / organizer brand. " +
+    "8) Return at most 10 high-quality FUTURE events.";
 
-  const user = `User query: ${userQuery}\n\nSearch results:\n${compact}`;
+  const user = `Today: ${today}\nUser query: ${userQuery}\n\nSearch results:\n${compact}`;
 
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-pro",
+      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: sys },
         { role: "user", content: user },
@@ -190,8 +186,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!FIRECRAWL_API_KEY) throw new Error("FIRECRAWL_API_KEY missing");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY missing");
+    if (!TAVILY_API_KEY) throw new Error("TAVILY_API_KEY missing");
+    if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY missing");
 
     const body: FilterPayload = await req.json().catch(() => ({ query: "" }));
     if (!body.query || body.query.trim().length < 2) {
@@ -201,7 +197,7 @@ Deno.serve(async (req) => {
     }
 
     const fullQuery = buildSearchQuery(body);
-    const searchResults = await firecrawlSearch(fullQuery, body.limit ?? 10);
+    const searchResults = await tavilySearch(fullQuery, body.limit ?? 10);
     if (searchResults.length === 0) {
       return new Response(JSON.stringify({ events: [], query: fullQuery }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -209,14 +205,22 @@ Deno.serve(async (req) => {
     }
     const events = await extractEvents(body.query, searchResults);
 
+    const now = new Date();
+    // Hard filter: drop any event with a known past date — strictly future only
+    const futureOnly = events.filter((e) => {
+      if (!e.event_date) return true; // keep events with unknown date
+      const d = new Date(e.event_date);
+      return isNaN(d.getTime()) || d >= now;
+    });
+
     // Optional client-side format hint reinforcement
     const filtered = body.format && body.format !== "any"
-      ? events.filter((e) => {
+      ? futureOnly.filter((e) => {
           if (body.format === "online") return e.is_online === true;
           if (body.format === "physical") return e.is_online === false;
           return true;
         })
-      : events;
+      : futureOnly;
 
     return new Response(JSON.stringify({ events: filtered, query: fullQuery, raw_count: searchResults.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
