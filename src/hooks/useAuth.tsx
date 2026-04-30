@@ -6,10 +6,13 @@ interface AuthCtx {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  recoveryMode: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, firstName: string) => Promise<{ error: string | null }>;
   signInWithOtp: (email: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<{ error: string | null }>;
+  updatePassword: (newPassword: string) => Promise<{ error: string | null }>;
 }
 
 const Ctx = createContext<AuthCtx | undefined>(undefined);
@@ -18,10 +21,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [recoveryMode, setRecoveryMode] = useState(false);
 
   useEffect(() => {
     // Set listener BEFORE getSession to avoid missed events
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((evt, s) => {
+      if (evt === "PASSWORD_RECOVERY") setRecoveryMode(true);
+      else setRecoveryMode(false);
       setSession(s);
       setUser(s?.user ?? null);
     });
@@ -63,8 +69,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await supabase.auth.signOut();
   };
 
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/`,
+    });
+    return { error: error?.message ?? null };
+  };
+
+  const updatePassword = async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (!error) setRecoveryMode(false);
+    return { error: error?.message ?? null };
+  };
+
   return (
-    <Ctx.Provider value={{ user, session, loading, signIn, signUp, signInWithOtp, signOut }}>
+    <Ctx.Provider value={{ user, session, loading, recoveryMode, signIn, signUp, signInWithOtp, signOut, resetPassword, updatePassword }}>
       {children}
     </Ctx.Provider>
   );

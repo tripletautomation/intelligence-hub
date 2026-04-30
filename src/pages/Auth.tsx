@@ -8,19 +8,72 @@ import { toast } from "sonner";
 import { Mail, Lock, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Mode = "in" | "up" | "otp";
+type Mode = "in" | "up" | "otp" | "reset";
 
 const Auth = () => {
-  const { user, loading, signIn, signUp, signInWithOtp } = useAuth();
+  const { user, loading, recoveryMode, signIn, signUp, signInWithOtp, resetPassword, updatePassword } = useAuth();
   const nav = useNavigate();
   const [mode, setMode] = useState<Mode>("in");
   const [otpSent, setOtpSent] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (!loading && user) return <Navigate to="/" replace />;
+  if (!loading && user && !recoveryMode) return <Navigate to="/" replace />;
+
+  if (recoveryMode) {
+    const handleNewPassword = async (e: FormEvent) => {
+      e.preventDefault();
+      if (newPassword.length < 6) { toast.error("הסיסמה חייבת להכיל לפחות 6 תווים"); return; }
+      setBusy(true);
+      const { error } = await updatePassword(newPassword);
+      setBusy(false);
+      if (error) { toast.error(error); return; }
+      toast.success("הסיסמה עודכנה בהצלחה");
+      nav("/");
+    };
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-6">
+        <div className="surface-card w-full max-w-md p-8 animate-fade-in">
+          <div className="mb-6">
+            <div className="text-xs uppercase tracking-widest text-accent font-semibold">Triple T</div>
+            <h1 className="text-2xl mt-1">הגדר סיסמה חדשה</h1>
+          </div>
+          <form onSubmit={handleNewPassword} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="new_pw">סיסמה חדשה</Label>
+              <Input
+                id="new_pw"
+                type="password"
+                required
+                minLength={6}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                dir="ltr"
+                className="text-start"
+                placeholder="לפחות 6 תווים"
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={busy}>
+              {busy ? "מעדכן..." : "עדכן סיסמה"}
+            </Button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  const handleReset = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    const { error } = await resetPassword(email);
+    setBusy(false);
+    if (error) { toast.error(error); return; }
+    setResetSent(true);
+  };
 
   const handlePasswordAuth = async (e: FormEvent) => {
     e.preventDefault();
@@ -87,7 +140,42 @@ const Auth = () => {
           ))}
         </div>
 
-        {mode === "otp" ? (
+        {mode === "reset" ? (
+          resetSent ? (
+            <div className="text-center space-y-4 py-4">
+              <Mail className="h-12 w-12 text-accent mx-auto" />
+              <h2 className="text-lg font-semibold text-primary">בדוק/י את תיבת המייל</h2>
+              <p className="text-sm text-muted-foreground">
+                שלחנו קישור לאיפוס סיסמה ל-<span className="font-medium text-foreground" dir="ltr">{email}</span>.
+              </p>
+              <button type="button" onClick={() => { setResetSent(false); setMode("in"); }} className="text-sm text-accent hover:underline">
+                חזרה להתחברות
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleReset} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="reset_email">דוא״ל</Label>
+                <Input
+                  id="reset_email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  dir="ltr"
+                  className="text-start"
+                  placeholder="your@email.com"
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={busy}>
+                {busy ? "שולח..." : "שלח קישור לאיפוס סיסמה"}
+              </Button>
+              <button type="button" onClick={() => setMode("in")} className="w-full text-sm text-muted-foreground hover:text-foreground text-center">
+                חזרה להתחברות
+              </button>
+            </form>
+          )
+        ) : mode === "otp" ? (
           otpSent ? (
             <div className="text-center space-y-4 py-4">
               <Mail className="h-12 w-12 text-accent mx-auto" />
@@ -157,7 +245,18 @@ const Auth = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="pw">סיסמה</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="pw">סיסמה</Label>
+                {mode === "in" && (
+                  <button
+                    type="button"
+                    onClick={() => { setMode("reset"); setResetSent(false); }}
+                    className="text-xs text-muted-foreground hover:text-accent transition-colors"
+                  >
+                    שכחתי סיסמה
+                  </button>
+                )}
+              </div>
               <Input
                 id="pw"
                 type="password"
