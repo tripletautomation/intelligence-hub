@@ -8,13 +8,12 @@ import { toast } from "sonner";
 import { Mail, Lock, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Mode = "in" | "up" | "otp" | "reset";
+type Mode = "in" | "up" | "reset";
 
 const Auth = () => {
-  const { user, loading, recoveryMode, signIn, signUp, signInWithOtp, resetPassword, updatePassword } = useAuth();
+  const { user, loading, recoveryMode, signIn, signUp, resetPassword, updatePassword } = useAuth();
   const nav = useNavigate();
   const [mode, setMode] = useState<Mode>("in");
-  const [otpSent, setOtpSent] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
@@ -98,19 +97,8 @@ const Auth = () => {
     }
   };
 
-  const handleOtp = async (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    const { error } = await signInWithOtp(email);
-    setBusy(false);
-    if (error) { toast.error(error); return; }
-    setOtpSent(true);
-    toast.success("קישור נשלח למייל שלך");
-  };
-
   const tabs: { id: Mode; label: string; icon: React.ReactNode }[] = [
-    { id: "in", label: "סיסמה", icon: <Lock className="h-3.5 w-3.5" /> },
-    { id: "otp", label: "קישור במייל", icon: <Mail className="h-3.5 w-3.5" /> },
+    { id: "in", label: "התחברות", icon: <Lock className="h-3.5 w-3.5" /> },
     { id: "up", label: "הרשמה", icon: <UserPlus className="h-3.5 w-3.5" /> },
   ];
 
@@ -127,7 +115,7 @@ const Auth = () => {
             <button
               key={t.id}
               type="button"
-              onClick={() => { setMode(t.id); setOtpSent(false); }}
+              onClick={() => setMode(t.id)}
               className={cn(
                 "flex-1 flex items-center justify-center gap-1.5 text-xs font-medium py-2 rounded-md transition-colors",
                 mode === t.id
@@ -173,46 +161,6 @@ const Auth = () => {
               <button type="button" onClick={() => setMode("in")} className="w-full text-sm text-muted-foreground hover:text-foreground text-center">
                 חזרה להתחברות
               </button>
-            </form>
-          )
-        ) : mode === "otp" ? (
-          otpSent ? (
-            <div className="text-center space-y-4 py-4">
-              <Mail className="h-12 w-12 text-accent mx-auto" />
-              <h2 className="text-lg font-semibold text-primary">בדוק/י את תיבת המייל</h2>
-              <p className="text-sm text-muted-foreground">
-                שלחנו קישור כניסה ל-<span className="font-medium text-foreground" dir="ltr">{email}</span>.
-                לחץ על הקישור במייל כדי להתחבר.
-              </p>
-              <button
-                type="button"
-                onClick={() => setOtpSent(false)}
-                className="text-sm text-accent hover:underline"
-              >
-                שלח שוב
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={handleOtp} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="otp_email">דוא״ל</Label>
-                <Input
-                  id="otp_email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  dir="ltr"
-                  className="text-start"
-                  placeholder="your@email.com"
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={busy}>
-                {busy ? "שולח..." : "שלח קישור כניסה"}
-              </Button>
-              <p className="text-xs text-muted-foreground text-center">
-                תקבל/י מייל עם קישור — ללא צורך בסיסמה
-              </p>
             </form>
           )
         ) : (
