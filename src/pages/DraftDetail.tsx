@@ -71,10 +71,10 @@ const TONES: { id: Tone; label: string }[] = [
   { id: "concise", label: "תמציתי" },
 ];
 
-const PLATFORMS: { id: Platform; label: string; icon: React.ReactNode; maxChars: number | null; color: string; isPrompt?: boolean }[] = [
-  { id: "linkedin_en", label: "LinkedIn — English", icon: <Linkedin className="h-4 w-4" />, maxChars: 3000, color: "text-blue-600" },
-  { id: "linkedin_he", label: "LinkedIn — עברית",   icon: <Linkedin className="h-4 w-4" />, maxChars: 3000, color: "text-blue-700" },
-  { id: "image_prompt", label: "Image Prompt", icon: <Image className="h-4 w-4" />, maxChars: null, color: "text-purple-600", isPrompt: true },
+const PLATFORMS: { id: Platform; label: string; icon: React.ReactNode; idealMin: number | null; idealMax: number | null; hardMax: number | null; color: string; isPrompt?: boolean }[] = [
+  { id: "linkedin_en", label: "LinkedIn — English", icon: <Linkedin className="h-4 w-4" />, idealMin: 1300, idealMax: 1800, hardMax: 3000, color: "text-blue-600" },
+  { id: "linkedin_he", label: "LinkedIn — עברית",   icon: <Linkedin className="h-4 w-4" />, idealMin: 1300, idealMax: 1800, hardMax: 3000, color: "text-blue-700" },
+  { id: "image_prompt", label: "Image Prompt", icon: <Image className="h-4 w-4" />, idealMin: null, idealMax: null, hardMax: null, color: "text-purple-600", isPrompt: true },
 ];
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -203,13 +203,18 @@ const DraftDetail = () => {
 
   // ── AI Actions ───────────────────────────────────────────────────────────────
 
-  const runRefine = async (action: AiAction, customInstruction?: string) => {
+  const [refiningSection, setRefiningSection] = useState<Section | null>(null);
+
+  const runRefine = async (action: AiAction, customInstruction?: string, sectionOverride?: Section) => {
+    const sec = sectionOverride ?? activeSection;
+    setActiveSection(sec);
     setRefineLoading(true);
+    setRefiningSection(sec);
     setShowRephraseInput(false);
     try {
       const { data, error } = await supabase.functions.invoke("refine-section", {
         body: {
-          draft_id: id, section: activeSection, action, tone: activeTone,
+          draft_id: id, section: sec, action, tone: activeTone,
           custom_instruction: customInstruction || undefined,
           article_context: { title: form.title, intro: form.intro ?? "", body: form.body ?? "", closing: form.closing ?? "" },
         },
@@ -217,11 +222,11 @@ const DraftDetail = () => {
       if (error) throw new Error(error.message);
       const refined: string = (data as any)?.refined;
       if (!refined) throw new Error("AI לא החזיר תוצאה");
-      setForm((f) => ({ ...f, [activeSection]: refined }));
-      toast.success(`${SECTION_LABELS[activeSection]} עודכן`);
+      setForm((f) => ({ ...f, [sec]: refined }));
+      toast.success(`${SECTION_LABELS[sec]} עודכן`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "שגיאה ב-AI");
-    } finally { setRefineLoading(false); }
+    } finally { setRefineLoading(false); setRefiningSection(null); }
   };
 
   const runRegenerateWithContext = async () => {
@@ -436,17 +441,32 @@ const DraftDetail = () => {
               <div key={sec} className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label className="text-xs uppercase tracking-wider text-muted-foreground">{SECTION_LABELS[sec]}</Label>
-                  <button type="button" onClick={() => setActiveSection(sec)}
-                    className={cn("text-[11px] px-2 py-0.5 rounded-full border transition-colors",
-                      activeSection === sec ? "border-accent/40 bg-accent/10 text-accent" : "border-border text-muted-foreground hover:text-foreground"
-                    )}>
-                    {activeSection === sec ? "נבחר לעריכת AI" : "בחר לעריכת AI"}
-                  </button>
+                  <div className="flex items-center gap-0.5">
+                    {refiningSection === sec
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin text-accent mx-1" />
+                      : AI_ACTIONS.map((action) => (
+                          <button key={action.id} type="button"
+                            disabled={refineLoading}
+                            title={action.label}
+                            onClick={() => {
+                              if (action.id === "rephrase") {
+                                setActiveSection(sec);
+                                setShowRephraseInput((v) => activeSection === sec ? !v : true);
+                              } else {
+                                runRefine(action.id, undefined, sec);
+                              }
+                            }}
+                            className="p-1.5 rounded text-muted-foreground hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-40">
+                            {action.icon}
+                          </button>
+                        ))
+                    }
+                  </div>
                 </div>
                 <Textarea id={sec} value={(form[sec] as string) ?? ""}
                   onChange={(e) => setForm((f) => ({ ...f, [sec]: e.target.value }))}
-                  rows={sec === "body" ? 14 : 4}
-                  className={cn("leading-relaxed transition-colors", activeSection === sec && "ring-1 ring-accent/40")} />
+                  rows={sec === "body" ? 16 : 5}
+                  className="leading-relaxed" />
               </div>
             ))}
           </Card>
@@ -456,39 +476,28 @@ const DraftDetail = () => {
             {/* AI Refine */}
             <Card className="p-4 space-y-4">
               <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-accent" /><div className="text-sm font-semibold text-primary">כלי AI</div></div>
-              <div className="space-y-2">
-                <div className="text-xs text-muted-foreground uppercase tracking-wider">קטע פעיל</div>
-                <div className="flex flex-wrap gap-1">
-                  {(["intro", "body", "closing"] as Section[]).map((sec) => (
-                    <button key={sec} type="button" onClick={() => setActiveSection(sec)}
-                      className={cn("text-xs px-2.5 py-1 rounded-full border transition-colors",
-                        activeSection === sec ? "border-accent bg-accent/10 text-accent" : "border-border text-muted-foreground hover:border-accent/50"
-                      )}>{SECTION_LABELS[sec]}</button>
-                  ))}
-                </div>
+              <div className="text-xs text-muted-foreground leading-relaxed">
+                לחץ על אחד הכפתורים מעל כל קטע כדי לערוך אותו ישירות.<br />
+                <span className="inline-flex gap-2 mt-1 items-center flex-wrap">
+                  <span title="כתוב מחדש"><RefreshCw className="h-3 w-3 inline" /> כתוב מחדש</span>
+                  <span title="הרחב"><Maximize2 className="h-3 w-3 inline" /> הרחב</span>
+                  <span title="קצר"><Minimize2 className="h-3 w-3 inline" /> קצר</span>
+                  <span title="נסח מחדש"><Wand2 className="h-3 w-3 inline" /> נסח מחדש</span>
+                </span>
               </div>
               <div className="space-y-2">
-                <div className="text-xs text-muted-foreground uppercase tracking-wider">טון</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider">טון לעריכה</div>
                 <Select value={activeTone} onValueChange={(v) => setActiveTone(v as Tone)}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>{TONES.map((t) => <SelectItem key={t.id} value={t.id} className="text-xs">{t.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
-                {AI_ACTIONS.map((action) => (
-                  <Button key={action.id} variant="outline" size="sm" className="w-full justify-start gap-2 h-8 text-xs"
-                    disabled={refineLoading}
-                    onClick={() => action.id === "rephrase" ? setShowRephraseInput((v) => !v) : runRefine(action.id)}>
-                    {refineLoading && activeSection ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : action.icon}
-                    {action.label} — {SECTION_LABELS[activeSection]}
-                  </Button>
-                ))}
-              </div>
 
               {showRephraseInput && (
                 <div className="space-y-2 border border-accent/30 rounded-md p-3 bg-accent/5">
-                  <div className="text-xs text-muted-foreground">מה לשנות? (השאר ריק לניסוח כללי)</div>
+                  <div className="text-xs text-muted-foreground">הנחייה לניסוח ({SECTION_LABELS[activeSection]})</div>
                   <Textarea
+                    autoFocus
                     placeholder="לדוגמה: תהפוך את זה לפחות טכני, הוסף נתוני שוק..."
                     value={rephraseInstruction}
                     onChange={(e) => setRephraseInstruction(e.target.value)}
@@ -639,77 +648,61 @@ const DraftDetail = () => {
               {PLATFORMS.map((platform) => {
                 const content = socialPosts[platform.id] ?? "";
                 const charCount = content.length;
-                const overLimit = platform.maxChars !== null && charCount > platform.maxChars;
+                const charColorClass = platform.idealMin === null ? "text-muted-foreground"
+                  : charCount < platform.idealMin! ? "text-yellow-500"
+                  : charCount <= platform.idealMax! ? "text-green-500 font-medium"
+                  : charCount <= platform.hardMax! ? "text-orange-500 font-medium"
+                  : "text-destructive font-medium";
 
                 return (
                   <Card key={platform.id} className={cn("p-5 flex flex-col gap-3", platform.isPrompt && "lg:col-span-2")}>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className={cn("flex items-center gap-2 font-semibold text-sm", platform.color)}>
                         {platform.icon} {platform.label}
                       </div>
-                      {platform.maxChars !== null && (
-                        <div className={cn("text-xs", overLimit ? "text-destructive font-medium" : "text-muted-foreground")}>
-                          {charCount} / {platform.maxChars}
+                      {platform.idealMin !== null ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground">אידאלי: {platform.idealMin}-{platform.idealMax}</span>
+                          <span className={cn("text-xs tabular-nums", charColorClass)}>{charCount}</span>
                         </div>
-                      )}
-                      {platform.isPrompt && (
-                        <span className="text-xs text-muted-foreground">העתק והכנס למודל תמונות (Midjourney / DALL-E)</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">העתק והכנס למחולל תמונות</span>
                       )}
                     </div>
 
-                    {editingPlatform === platform.id ? (
-                      <Textarea
-                        autoFocus
-                        defaultValue={content}
-                        rows={platform.isPrompt ? 5 : 6}
-                        className="text-sm leading-relaxed"
-                        dir={platform.id === "linkedin_he" ? "rtl" : "ltr"}
-                        onChange={(e) => setSocialPosts((p) => p ? { ...p, [platform.id]: e.target.value } : p)}
-                      />
-                    ) : (
-                      <p className={cn(
-                        "text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap",
-                        platform.isPrompt ? "line-clamp-4 font-mono text-xs" : "line-clamp-6"
-                      )} dir={platform.id === "linkedin_he" ? "rtl" : "ltr"}>
-                        {content}
-                      </p>
-                    )}
+                    <Textarea
+                      value={content}
+                      rows={platform.isPrompt ? 6 : 10}
+                      className={cn("text-sm leading-relaxed resize-y", platform.isPrompt && "font-mono text-xs")}
+                      dir={platform.id === "linkedin_he" ? "rtl" : "ltr"}
+                      readOnly={platform.isPrompt}
+                      onChange={(e) => setSocialPosts((p) => p ? { ...p, [platform.id]: e.target.value } : p)}
+                    />
 
-                    <div className="flex items-center gap-2 pt-2 border-t border-border mt-auto flex-wrap">
+                    <div className="flex items-center gap-2 pt-1 border-t border-border flex-wrap">
                       <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs"
                         onClick={() => copyPlatform(platform.id)}>
                         {copiedPlatform === platform.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                         {copiedPlatform === platform.id ? "הועתק" : "העתק"}
                       </Button>
                       {!platform.isPrompt && (
-                        <>
-                          <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs"
-                            onClick={() => setEditingPlatform(editingPlatform === platform.id ? null : platform.id)}>
-                            {editingPlatform === platform.id
-                              ? <><Check className="h-3.5 w-3.5" /> סיום עריכה</>
-                              : <><Wand2 className="h-3.5 w-3.5" /> ערוך</>}
-                          </Button>
-                          <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs"
-                            onClick={() => {
-                              if (socialAiPlatform === platform.id) { setSocialAiPlatform(null); setSocialAiInstruction(""); }
-                              else { setSocialAiPlatform(platform.id); setSocialAiInstruction(""); setEditingPlatform(null); }
-                            }}>
-                            <Sparkles className="h-3.5 w-3.5" />
-                            {socialAiPlatform === platform.id ? "סגור AI" : "AI עריכה"}
-                          </Button>
-                        </>
-                      )}
-                      {overLimit && (
-                        <span className="text-xs text-destructive mr-auto">חורג מהמגבלה</span>
+                        <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs"
+                          onClick={() => {
+                            if (socialAiPlatform === platform.id) { setSocialAiPlatform(null); setSocialAiInstruction(""); }
+                            else { setSocialAiPlatform(platform.id); setSocialAiInstruction(""); }
+                          }}>
+                          <Sparkles className="h-3.5 w-3.5" />
+                          {socialAiPlatform === platform.id ? "סגור AI" : "שפר עם AI"}
+                        </Button>
                       )}
                     </div>
 
                     {socialAiPlatform === platform.id && (
-                      <div className="space-y-2 border border-accent/30 rounded-md p-3 bg-accent/5 mt-2">
+                      <div className="space-y-2 border border-accent/30 rounded-md p-3 bg-accent/5">
                         <div className="text-xs text-muted-foreground">מה לשנות בפוסט?</div>
                         <Textarea
                           autoFocus
-                          placeholder="לדוגמה: קצר ב-30%, הוסף קריאה לפעולה, שנה טון..."
+                          placeholder="לדוגמה: קצר ב-30%, שפר את ה-hook, הוסף קריאה לפעולה..."
                           value={socialAiInstruction}
                           onChange={(e) => setSocialAiInstruction(e.target.value)}
                           rows={2}

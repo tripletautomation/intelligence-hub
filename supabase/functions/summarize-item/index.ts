@@ -54,9 +54,9 @@ Deno.serve(async (req) => {
     );
     if (!apiKey) return json({ error: `API key missing for provider: ${provider}` }, 500);
 
-    const systemPrompt = `אתה אנליסט מודיעין עסקי המתמחה בתחום מרכזי הנתונים, תשתיות ענן וטכנולוגיה.
-תקבל פריט מידע ועליך להחזיר סיכום מובנה דרך הכלי emit_summary.
-הסיכום צריך להיות בעברית מקצועית, תמציתית ומדויקת.`;
+    const systemPrompt = `אתה אנליסט מודיעין עסקי בכיר המתמחה בתחום מרכזי הנתונים, תשתיות ענן, סייבר ו-AI.
+תקבל פריט מידע ועליך להחזיר ניתוח מעמיק ומובנה דרך הכלי emit_summary.
+הניתוח צריך להיות בעברית מקצועית — לא תקציר שטחי אלא ניתוח עם הקשר, משמעות והשלכות.`;
 
     const userPrompt = `כותרת: ${item.title_he}
 ${item.summary_he ? `\nסיכום קיים: ${item.summary_he}` : ""}
@@ -68,24 +68,26 @@ ${item.url ? `\nמקור: ${item.url}` : ""}
 
     const emitTool = {
       name: "emit_summary",
-      description: "Emit a structured intelligence brief",
+      description: "Emit a structured deep intelligence brief",
       parameters: {
         type: "object",
         properties: {
-          brief: { type: "string", description: "סיכום תמציתי ב-2-3 משפטים — המהות בלבד" },
+          brief: { type: "string", description: "סיכום ב-3-4 משפטים — מה קרה, מי מעורב, ומה המשמעות הישירה" },
           key_points: {
             type: "array",
             items: { type: "string" },
-            description: "3-4 נקודות מפתח קצרות מהפריט",
+            description: "5-6 נקודות מפתח — כל נקודה משפט שלם עם מספר/עובדה ספציפית",
           },
-          implications: { type: "string", description: "השלכה עסקית/אסטרטגית קצרה — משפט אחד" },
+          implications: { type: "string", description: "השלכה עסקית/אסטרטגית — 2-3 משפטים על מה זה אומר לשוק" },
+          market_context: { type: "string", description: "הקשר שוק רחב — פסקה שמסבירה למה הנושא הזה מתרחש עכשיו ומה הטרנד הגדול מאחוריו" },
+          what_to_watch: { type: "string", description: "מה לעקוב אחריו — 2-3 משפטים על ההתפתחויות הבאות שכדאי לצפות" },
         },
-        required: ["brief", "key_points", "implications"],
+        required: ["brief", "key_points", "implications", "market_context", "what_to_watch"],
         additionalProperties: false,
       },
     };
 
-    let result: { brief: string; key_points: string[]; implications: string };
+    let result: { brief: string; key_points: string[]; implications: string; market_context: string; what_to_watch: string };
 
     if (provider === "anthropic") {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -93,7 +95,7 @@ ${item.url ? `\nמקור: ${item.url}` : ""}
         headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
         body: JSON.stringify({
           model: modelId,
-          max_tokens: 1024,
+          max_tokens: 2048,
           system: systemPrompt,
           tools: [{ name: emitTool.name, description: emitTool.description, input_schema: emitTool.parameters }],
           tool_choice: { type: "tool", name: "emit_summary" },

@@ -19,6 +19,8 @@ interface SummaryResult {
   brief: string;
   key_points: string[];
   implications: string;
+  market_context?: string;
+  what_to_watch?: string;
 }
 
 interface Props {
@@ -151,22 +153,37 @@ export const ItemDrawer = ({ item, source, state, open, onOpenChange, onAction }
               )}
             </button>
             {summary && summaryOpen && (
-              <div className="px-4 pb-4 space-y-3 border-t border-border">
+              <div className="px-4 pb-4 space-y-4 border-t border-border">
                 <p className="text-sm text-foreground/80 leading-relaxed pt-3">{summary.brief}</p>
                 {summary.key_points.length > 0 && (
-                  <ul className="space-y-1">
-                    {summary.key_points.map((pt, i) => (
-                      <li key={i} className="text-sm flex gap-2">
-                        <span className="text-accent font-bold shrink-0">•</span>
-                        <span>{pt}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">נקודות מפתח</div>
+                    <ul className="space-y-1.5">
+                      {summary.key_points.map((pt, i) => (
+                        <li key={i} className="text-sm flex gap-2">
+                          <span className="text-accent font-bold shrink-0">•</span>
+                          <span>{pt}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {summary.market_context && (
+                  <div className="rounded-lg bg-muted/40 p-3">
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">הקשר שוק</div>
+                    <p className="text-sm text-foreground/80 leading-relaxed">{summary.market_context}</p>
+                  </div>
                 )}
                 {summary.implications && (
-                  <div className="text-xs text-muted-foreground border-t border-border pt-2">
-                    <span className="font-medium text-foreground">השלכות: </span>
-                    {summary.implications}
+                  <div className="border-t border-border pt-3">
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">השלכות עסקיות</div>
+                    <p className="text-sm text-foreground/80">{summary.implications}</p>
+                  </div>
+                )}
+                {summary.what_to_watch && (
+                  <div className="border-t border-border pt-3">
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">מה לעקוב אחריו</div>
+                    <p className="text-sm text-foreground/80">{summary.what_to_watch}</p>
                   </div>
                 )}
               </div>
