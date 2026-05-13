@@ -128,18 +128,29 @@ Deno.serve(async (req) => {
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
     // Read AI config — use light (fast/cheap) model tier for editing tasks
-    const { data: aiConfig } = await admin
-      .from("ai_config").select("provider,model_id").eq("id", "default").maybeSingle();
-    const provider = aiConfig?.provider ?? "openai";
+    const [aiConfigRes, writingStyleRes] = await Promise.all([
+      admin.from("ai_config").select("provider,model_id").eq("id", "default").maybeSingle(),
+      admin.from("ai_config").select("prompt_text").eq("id", "writing_style").maybeSingle(),
+    ]);
+    const provider = aiConfigRes.data?.provider ?? "openai";
     const modelId = getLightModel(provider);
+    const writingStylePrompt: string = writingStyleRes.data?.prompt_text?.trim() ?? "";
+
+    async function getApiKey(envName: string): Promise<string | undefined> {
+      const { data } = await admin.from("admin_api_keys").select("key_value").eq("key_name", envName).maybeSingle();
+      return data?.key_value || Deno.env.get(envName);
+    }
 
     const sectionLabel = SECTION_LABELS[section];
     const actionInstruction = ACTION_INSTRUCTIONS[action];
     const toneInstruction = tone ? TONE_INSTRUCTIONS[tone] : "";
 
-    const systemPrompt = `אתה עורך תוכן מקצועי הכותב בעברית רהוטה ומקצועית.
+    const systemPromptBase = `אתה עורך תוכן מקצועי הכותב בעברית רהוטה ומקצועית.
 תקבל קטע ממאמר ותבצע עליו פעולת עריכה ספציפית.
 החזר את הקטע הערוך בלבד — ללא הסבר, ללא כותרות, ללא מרכאות.`;
+    const systemPrompt = writingStylePrompt
+      ? `${systemPromptBase}\n\nהנחיות סגנון קבועות (שמור עליהן):\n${writingStylePrompt}`
+      : systemPromptBase;
 
     const effectiveAction = (action === "rephrase" && custom_instruction)
       ? `נסח מחדש לפי ההנחייה הספציפית הבאה: ${custom_instruction}`
@@ -166,9 +177,9 @@ ${toneInstruction ? `סגנון: ${toneInstruction}` : ""}
       systemPrompt,
       userPrompt,
       {
-        lovable: Deno.env.get("LOVABLE_API_KEY"),
-        anthropic: Deno.env.get("ANTHROPIC_API_KEY"),
-        openai: Deno.env.get("OPENAI_API_KEY"),
+        lovable: await getApiKey("LOVABLE_API_KEY"),
+        anthropic: await getApiKey("ANTHROPIC_API_KEY"),
+        openai: await getApiKey("OPENAI_API_KEY"),
       },
     );
 

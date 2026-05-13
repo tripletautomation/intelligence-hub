@@ -1,12 +1,25 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import type { Item, Source, ItemUserState } from "@/lib/types";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { RegionBadge } from "./RegionBadge";
 import { formatHeDateTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-import { Bookmark, BookmarkCheck, ExternalLink, ThumbsDown, ThumbsUp, Check, MapPin, Calendar, Eye, Mail } from "lucide-react";
+import {
+  Bookmark, BookmarkCheck, ExternalLink, ThumbsDown, ThumbsUp, Check,
+  MapPin, Calendar, Eye, Mail, FileText, Sparkles, Loader2, ChevronDown,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buildMailtoUrl } from "@/lib/mailto";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+
+interface SummaryResult {
+  brief: string;
+  key_points: string[];
+  implications: string;
+}
 
 interface Props {
   item: Item | null;
@@ -18,10 +31,55 @@ interface Props {
 }
 
 export const ItemDrawer = ({ item, source, state, open, onOpenChange, onAction }: Props) => {
+  const nav = useNavigate();
+  const qc = useQueryClient();
+  const [summary, setSummary] = useState<SummaryResult | null>(null);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+
   useEffect(() => {
-    if (open && item) onAction("view");
+    if (open && item) {
+      onAction("view");
+      setSummary(null);
+      setSummaryOpen(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, item?.id]);
+
+  const summarize = useMutation({
+    mutationFn: async () => {
+      if (!item) throw new Error("אין פריט");
+      const { data, error } = await supabase.functions.invoke("summarize-item", {
+        body: { item_id: item.id },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return data as SummaryResult;
+    },
+    onSuccess: (result) => {
+      setSummary(result);
+      setSummaryOpen(true);
+    },
+    onError: (e: Error) => toast.error(e.message ?? "שגיאה בסיכום"),
+  });
+
+  const writeArticle = useMutation({
+    mutationFn: async () => {
+      if (!item) throw new Error("אין פריט");
+      const { data, error } = await supabase.functions.invoke("generate-article", {
+        body: { item_ids: [item.id] },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return (data as any).draft_id as string;
+    },
+    onSuccess: (draftId) => {
+      toast.success("טיוטת מאמר נוצרה");
+      qc.invalidateQueries({ queryKey: ["article_drafts"] });
+      onOpenChange(false);
+      nav(`/drafts/${draftId}`);
+    },
+    onError: (e: Error) => toast.error(e.message ?? "שגיאה ביצירת המאמר"),
+  });
 
   if (!item) return null;
 
@@ -71,6 +129,50 @@ export const ItemDrawer = ({ item, source, state, open, onOpenChange, onAction }
             </div>
           )}
 
+          {/* AI Summary */}
+          <div className="rounded-xl border border-border overflow-hidden">
+            <button
+              type="button"
+              onClick={() => {
+                if (!summary && !summarize.isPending) summarize.mutate();
+                else setSummaryOpen((v) => !v);
+              }}
+              disabled={summarize.isPending}
+              className="w-full flex items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-primary hover:bg-muted/30 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                {summarize.isPending
+                  ? <Loader2 className="h-4 w-4 animate-spin text-accent" />
+                  : <Sparkles className="h-4 w-4 text-accent" />}
+                {summarize.isPending ? "מסכם..." : "סיכום AI"}
+              </span>
+              {summary && (
+                <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", summaryOpen && "rotate-180")} />
+              )}
+            </button>
+            {summary && summaryOpen && (
+              <div className="px-4 pb-4 space-y-3 border-t border-border">
+                <p className="text-sm text-foreground/80 leading-relaxed pt-3">{summary.brief}</p>
+                {summary.key_points.length > 0 && (
+                  <ul className="space-y-1">
+                    {summary.key_points.map((pt, i) => (
+                      <li key={i} className="text-sm flex gap-2">
+                        <span className="text-accent font-bold shrink-0">•</span>
+                        <span>{pt}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {summary.implications && (
+                  <div className="text-xs text-muted-foreground border-t border-border pt-2">
+                    <span className="font-medium text-foreground">השלכות: </span>
+                    {summary.implications}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {item.tags_ai.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {item.tags_ai.map((t) => (
@@ -80,6 +182,25 @@ export const ItemDrawer = ({ item, source, state, open, onOpenChange, onAction }
               ))}
             </div>
           )}
+
+          {/* Write Article CTA */}
+          <div className="rounded-xl border border-accent/30 bg-accent/5 p-4 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-primary">כתוב מאמר מידיעה זו</p>
+              <p className="text-xs text-muted-foreground">יצור טיוטת מאמר מלאה בלחיצה אחת</p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => writeArticle.mutate()}
+              disabled={writeArticle.isPending}
+              className="gap-1.5 shrink-0"
+            >
+              {writeArticle.isPending
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <FileText className="h-4 w-4" />}
+              {writeArticle.isPending ? "יוצר..." : "צור מאמר"}
+            </Button>
+          </div>
 
           <div className="flex items-center gap-1 flex-wrap pt-2 border-t border-border">
             {item.url && (

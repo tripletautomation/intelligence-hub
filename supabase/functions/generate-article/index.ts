@@ -170,13 +170,21 @@ Deno.serve(async (req) => {
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
     // Read AI config — "article" row for writing, fall back to "default"
-    const { data: articleConfig } = await admin
-      .from("ai_config").select("provider,model_id").eq("id", "article").maybeSingle();
-    const { data: defaultConfig } = await admin
-      .from("ai_config").select("provider,model_id").eq("id", "default").maybeSingle();
-    const aiConfig = articleConfig ?? defaultConfig;
+    const [articleConfigRes, defaultConfigRes, writingStyleRes] = await Promise.all([
+      admin.from("ai_config").select("provider,model_id").eq("id", "article").maybeSingle(),
+      admin.from("ai_config").select("provider,model_id").eq("id", "default").maybeSingle(),
+      admin.from("ai_config").select("prompt_text").eq("id", "writing_style").maybeSingle(),
+    ]);
+    const aiConfig = articleConfigRes.data ?? defaultConfigRes.data;
     const provider: string = aiConfig?.provider ?? "openai";
     const modelId: string = aiConfig?.model_id ?? "gpt-4.1";
+    const writingStylePrompt: string = writingStyleRes.data?.prompt_text?.trim() ?? "";
+
+    // Read API key from DB first, fall back to env secret
+    async function getApiKey(envName: string): Promise<string | undefined> {
+      const { data } = await admin.from("admin_api_keys").select("key_value").eq("key_name", envName).maybeSingle();
+      return data?.key_value || Deno.env.get(envName);
+    }
 
     let items: ItemRow[] = [];
     if (itemIds.length > 0) {
@@ -216,19 +224,22 @@ Deno.serve(async (req) => {
     let parsed: { title: string; intro: string; body: string; closing: string };
 
     try {
-      const SYSTEM_PROMPT = buildSystemPrompt(targetWords);
+      const baseSystemPrompt = buildSystemPrompt(targetWords);
+      const SYSTEM_PROMPT = writingStylePrompt
+        ? `${baseSystemPrompt}\n\nהנחיות כתיבה נוספות (חובה לשמור עליהן):\n${writingStylePrompt}`
+        : baseSystemPrompt;
 
       if (provider === "anthropic") {
-        const key = Deno.env.get("ANTHROPIC_API_KEY");
-        if (!key) return json({ error: "ANTHROPIC_API_KEY missing in Edge Function secrets" }, 500);
+        const key = await getApiKey("ANTHROPIC_API_KEY");
+        if (!key) return json({ error: "ANTHROPIC_API_KEY missing" }, 500);
         parsed = await callAnthropic(modelId, userPrompt, key, SYSTEM_PROMPT);
       } else if (provider === "openai") {
-        const key = Deno.env.get("OPENAI_API_KEY");
-        if (!key) return json({ error: "OPENAI_API_KEY missing in Edge Function secrets" }, 500);
+        const key = await getApiKey("OPENAI_API_KEY");
+        if (!key) return json({ error: "OPENAI_API_KEY missing" }, 500);
         parsed = await callOpenAI(modelId, userPrompt, key, SYSTEM_PROMPT);
       } else {
-        const key = Deno.env.get("LOVABLE_API_KEY");
-        if (!key) return json({ error: "LOVABLE_API_KEY missing in Edge Function secrets" }, 500);
+        const key = await getApiKey("LOVABLE_API_KEY");
+        if (!key) return json({ error: "LOVABLE_API_KEY missing" }, 500);
         parsed = await callLovable(modelId, userPrompt, key, SYSTEM_PROMPT);
       }
     } catch (e: any) {

@@ -18,7 +18,7 @@ import {
 import {
   ArrowRight, Loader2, Save, Trash2, Mail, Copy, Check,
   Wand2, Maximize2, Minimize2, RefreshCw, Sparkles,
-  Globe, Plus, X, Linkedin, Twitter, Facebook, Instagram,
+  Globe, Plus, X, Linkedin, Image,
   Share2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -46,13 +46,13 @@ type UnifiedSource =
   | { kind: "db"; id: string; title: string; url: string | null }
   | { kind: "web"; title: string; snippet: string; url: string; relevance: number };
 
-interface SocialPosts { linkedin: string; facebook: string; instagram: string; twitter: string; }
+interface SocialPosts { linkedin_en: string; linkedin_he: string; image_prompt: string; }
 
 type Section = "intro" | "body" | "closing";
 type AiAction = "regenerate" | "expand" | "condense" | "rephrase";
 type Tone = "formal" | "analytical" | "concise";
 type MainTab = "editor" | "social";
-type Platform = "linkedin" | "facebook" | "instagram" | "twitter";
+type Platform = "linkedin_en" | "linkedin_he" | "image_prompt";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -71,11 +71,10 @@ const TONES: { id: Tone; label: string }[] = [
   { id: "concise", label: "תמציתי" },
 ];
 
-const PLATFORMS: { id: Platform; label: string; icon: React.ReactNode; maxChars: number; color: string }[] = [
-  { id: "linkedin",  label: "LinkedIn",  icon: <Linkedin className="h-4 w-4" />,  maxChars: 1300, color: "text-blue-600" },
-  { id: "facebook",  label: "Facebook",  icon: <Facebook className="h-4 w-4" />,  maxChars: 600,  color: "text-blue-500" },
-  { id: "instagram", label: "Instagram", icon: <Instagram className="h-4 w-4" />, maxChars: 300,  color: "text-pink-500" },
-  { id: "twitter",   label: "X / Twitter", icon: <Twitter className="h-4 w-4" />, maxChars: 280,  color: "text-foreground" },
+const PLATFORMS: { id: Platform; label: string; icon: React.ReactNode; maxChars: number | null; color: string; isPrompt?: boolean }[] = [
+  { id: "linkedin_en", label: "LinkedIn — English", icon: <Linkedin className="h-4 w-4" />, maxChars: 3000, color: "text-blue-600" },
+  { id: "linkedin_he", label: "LinkedIn — עברית",   icon: <Linkedin className="h-4 w-4" />, maxChars: 3000, color: "text-blue-700" },
+  { id: "image_prompt", label: "Image Prompt", icon: <Image className="h-4 w-4" />, maxChars: null, color: "text-purple-600", isPrompt: true },
 ];
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -155,8 +154,8 @@ const DraftDetail = () => {
   useEffect(() => {
     if (savedPosts?.length) {
       const posts: Partial<SocialPosts> = {};
-      savedPosts.forEach((p) => { posts[p.platform] = p.content; });
-      if (posts.linkedin && posts.facebook && posts.instagram && posts.twitter) {
+      savedPosts.forEach((p) => { (posts as any)[p.platform] = p.content; });
+      if (posts.linkedin_en && posts.linkedin_he && posts.image_prompt) {
         setSocialPosts(posts as SocialPosts);
       }
     }
@@ -631,41 +630,48 @@ const DraftDetail = () => {
           {socialLoading && (
             <div className="surface-card p-12 text-center text-muted-foreground animate-pulse">
               <Loader2 className="h-8 w-8 mx-auto mb-3 animate-spin" />
-              <p>AI יוצר פוסטים ל-4 פלטפורמות...</p>
+              <p>AI יוצר פוסטים ל-3 פלטפורמות...</p>
             </div>
           )}
 
           {socialPosts && !socialLoading && (
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 lg:grid-cols-2">
               {PLATFORMS.map((platform) => {
-                const content = editingPlatform === platform.id
-                  ? undefined // use textarea value
-                  : socialPosts[platform.id] ?? "";
-                const charCount = (socialPosts[platform.id] ?? "").length;
-                const overLimit = charCount > platform.maxChars;
+                const content = socialPosts[platform.id] ?? "";
+                const charCount = content.length;
+                const overLimit = platform.maxChars !== null && charCount > platform.maxChars;
 
                 return (
-                  <Card key={platform.id} className="p-5 flex flex-col gap-3">
+                  <Card key={platform.id} className={cn("p-5 flex flex-col gap-3", platform.isPrompt && "lg:col-span-2")}>
                     <div className="flex items-center justify-between">
                       <div className={cn("flex items-center gap-2 font-semibold text-sm", platform.color)}>
                         {platform.icon} {platform.label}
                       </div>
-                      <div className={cn("text-xs", overLimit ? "text-destructive font-medium" : "text-muted-foreground")}>
-                        {charCount} / {platform.maxChars}
-                      </div>
+                      {platform.maxChars !== null && (
+                        <div className={cn("text-xs", overLimit ? "text-destructive font-medium" : "text-muted-foreground")}>
+                          {charCount} / {platform.maxChars}
+                        </div>
+                      )}
+                      {platform.isPrompt && (
+                        <span className="text-xs text-muted-foreground">העתק והכנס למודל תמונות (Midjourney / DALL-E)</span>
+                      )}
                     </div>
 
                     {editingPlatform === platform.id ? (
                       <Textarea
                         autoFocus
-                        defaultValue={socialPosts[platform.id]}
-                        rows={6}
+                        defaultValue={content}
+                        rows={platform.isPrompt ? 5 : 6}
                         className="text-sm leading-relaxed"
+                        dir={platform.id === "linkedin_he" ? "rtl" : "ltr"}
                         onChange={(e) => setSocialPosts((p) => p ? { ...p, [platform.id]: e.target.value } : p)}
                       />
                     ) : (
-                      <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap line-clamp-6">
-                        {socialPosts[platform.id]}
+                      <p className={cn(
+                        "text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap",
+                        platform.isPrompt ? "line-clamp-4 font-mono text-xs" : "line-clamp-6"
+                      )} dir={platform.id === "linkedin_he" ? "rtl" : "ltr"}>
+                        {content}
                       </p>
                     )}
 
@@ -675,20 +681,24 @@ const DraftDetail = () => {
                         {copiedPlatform === platform.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                         {copiedPlatform === platform.id ? "הועתק" : "העתק"}
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs"
-                        onClick={() => setEditingPlatform(editingPlatform === platform.id ? null : platform.id)}>
-                        {editingPlatform === platform.id
-                          ? <><Check className="h-3.5 w-3.5" /> סיום עריכה</>
-                          : <><Wand2 className="h-3.5 w-3.5" /> ערוך</>}
-                      </Button>
-                      <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs"
-                        onClick={() => {
-                          if (socialAiPlatform === platform.id) { setSocialAiPlatform(null); setSocialAiInstruction(""); }
-                          else { setSocialAiPlatform(platform.id); setSocialAiInstruction(""); setEditingPlatform(null); }
-                        }}>
-                        <Sparkles className="h-3.5 w-3.5" />
-                        {socialAiPlatform === platform.id ? "סגור AI" : "AI עריכה"}
-                      </Button>
+                      {!platform.isPrompt && (
+                        <>
+                          <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs"
+                            onClick={() => setEditingPlatform(editingPlatform === platform.id ? null : platform.id)}>
+                            {editingPlatform === platform.id
+                              ? <><Check className="h-3.5 w-3.5" /> סיום עריכה</>
+                              : <><Wand2 className="h-3.5 w-3.5" /> ערוך</>}
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs"
+                            onClick={() => {
+                              if (socialAiPlatform === platform.id) { setSocialAiPlatform(null); setSocialAiInstruction(""); }
+                              else { setSocialAiPlatform(platform.id); setSocialAiInstruction(""); setEditingPlatform(null); }
+                            }}>
+                            <Sparkles className="h-3.5 w-3.5" />
+                            {socialAiPlatform === platform.id ? "סגור AI" : "AI עריכה"}
+                          </Button>
+                        </>
+                      )}
                       {overLimit && (
                         <span className="text-xs text-destructive mr-auto">חורג מהמגבלה</span>
                       )}

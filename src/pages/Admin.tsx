@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useSources, useItems } from "@/hooks/useIntelligence";
 import { toast } from "sonner";
@@ -15,7 +16,7 @@ import { SourceManager, type SourceManagerHandle } from "@/components/SourceMana
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, Globe2, Loader2, Rss, FileText, CalendarDays } from "lucide-react";
+import { Search, Globe2, Loader2, Rss, FileText, CalendarDays, Key, PenLine, CheckCircle2, Circle } from "lucide-react";
 import { UserAccessManager } from "@/components/UserAccessManager";
 import { ChevronDown, AlertTriangle, Activity, BrainCircuit, Save } from "lucide-react";
 
@@ -38,16 +39,29 @@ const AI_PROVIDERS = [
     models: [
       { id: "gpt-4.1", label: "GPT-4.1 — הכי חזק (מומלץ לכתיבה)" },
       { id: "gpt-4o", label: "GPT-4o" },
-      { id: "gpt-4o-mini", label: "GPT-4o mini — מהיר וזול" },
+      { id: "o3", label: "o3 — חשיבה מתקדמת" },
+      { id: "o3-mini", label: "o3 mini — חשיבה מהירה" },
       { id: "gpt-4.1-mini", label: "GPT-4.1 mini — מהיר וזול" },
+      { id: "gpt-4o-mini", label: "GPT-4o mini — מהיר וזול" },
+      { id: "gpt-4.1-nano", label: "GPT-4.1 nano — הכי זול" },
+    ],
+  },
+  {
+    id: "google",
+    label: "Google (Gemini)",
+    envKey: "GOOGLE_API_KEY",
+    models: [
+      { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro — הכי חזק" },
+      { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash — מהיר" },
+      { id: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite — מהיר וזול" },
     ],
   },
   {
     id: "lovable",
-    label: "Lovable AI Gateway (ברירת מחדל)",
+    label: "Lovable AI Gateway",
     envKey: "LOVABLE_API_KEY",
     models: [
-      { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+      { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro via Gateway" },
       { id: "openai/gpt-4o", label: "GPT-4o via Gateway" },
     ],
   },
@@ -177,6 +191,169 @@ const AiConfigSection = () => (
     </div>
   </div>
 );
+
+// ─── API Keys Section ─────────────────────────────────────────────────────────
+const API_KEY_DEFS = [
+  { name: "OPENAI_API_KEY", label: "OpenAI API Key" },
+  { name: "ANTHROPIC_API_KEY", label: "Anthropic API Key" },
+  { name: "GOOGLE_API_KEY", label: "Google (Gemini) API Key" },
+];
+
+const ApiKeysSection = () => {
+  const qc = useQueryClient();
+  const [inputs, setInputs] = useState<Record<string, string>>({});
+
+  const { data: existingKeys = [] } = useQuery<{ key_name: string }[]>({
+    queryKey: ["admin_api_keys"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("admin_api_keys").select("key_name");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const existingSet = new Set(existingKeys.map((k) => k.key_name));
+
+  const saveKey = useMutation({
+    mutationFn: async (keyName: string) => {
+      const val = inputs[keyName]?.trim();
+      if (!val) throw new Error("הזן ערך למפתח");
+      const { error } = await (supabase as any)
+        .from("admin_api_keys")
+        .upsert({ key_name: keyName, key_value: val, updated_at: new Date().toISOString() });
+      if (error) throw error;
+      return keyName;
+    },
+    onSuccess: (keyName) => {
+      toast.success("מפתח נשמר");
+      setInputs((prev) => ({ ...prev, [keyName]: "" }));
+      qc.invalidateQueries({ queryKey: ["admin_api_keys"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <div className="surface-card p-6">
+      <div className="flex items-center gap-2 mb-1">
+        <Key className="h-5 w-5 text-accent" />
+        <h2 className="text-lg font-bold text-primary">מפתחות API</h2>
+      </div>
+      <p className="text-sm text-muted-foreground mb-4">
+        שמור מפתחות API כאן — הם נשמרים מוצפנים ב-DB ומשמשים את כל פונקציות ה-AI.
+      </p>
+      <div className="space-y-3">
+        {API_KEY_DEFS.map((def) => (
+          <div key={def.name} className="rounded-lg border border-border p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-primary">{def.label}</p>
+                <p className="text-[10px] font-mono text-muted-foreground/70">{def.name}</p>
+              </div>
+              {existingSet.has(def.name) ? (
+                <span className="flex items-center gap-1 text-xs text-green-600">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> מוגדר
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Circle className="h-3.5 w-3.5" /> לא מוגדר
+                </span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                type="password"
+                placeholder={existingSet.has(def.name) ? "הזן ערך חדש להחלפה" : "הזן מפתח..."}
+                value={inputs[def.name] ?? ""}
+                onChange={(e) => setInputs((prev) => ({ ...prev, [def.name]: e.target.value }))}
+                className="flex-1 font-mono text-sm"
+                dir="ltr"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!inputs[def.name]?.trim() || saveKey.isPending}
+                onClick={() => saveKey.mutate(def.name)}
+                className="gap-1.5 shrink-0"
+              >
+                <Save className="h-3.5 w-3.5" />
+                שמור
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ─── Writing Style Section ────────────────────────────────────────────────────
+const WritingStyleSection = () => {
+  const qc = useQueryClient();
+  const [text, setText] = useState<string | null>(null);
+
+  const { data: saved, isLoading } = useQuery<{ prompt_text: string | null }>({
+    queryKey: ["ai_config", "writing_style"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("ai_config").select("prompt_text").eq("id", "writing_style").maybeSingle();
+      if (error) throw error;
+      return data ?? { prompt_text: "" };
+    },
+  });
+
+  const activeText = text ?? saved?.prompt_text ?? "";
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const { error } = await (supabase as any)
+        .from("ai_config")
+        .upsert({ id: "writing_style", provider: "none", model_id: "none", prompt_text: activeText, updated_at: new Date().toISOString() });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("הנחיות הכתיבה נשמרו");
+      setText(null);
+      qc.invalidateQueries({ queryKey: ["ai_config", "writing_style"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const isDirty = text !== null && text !== (saved?.prompt_text ?? "");
+
+  if (isLoading) return null;
+
+  return (
+    <div className="surface-card p-6">
+      <div className="flex items-center gap-2 mb-1">
+        <PenLine className="h-5 w-5 text-accent" />
+        <h2 className="text-lg font-bold text-primary">הנחיות כתיבת מאמרים</h2>
+      </div>
+      <p className="text-sm text-muted-foreground mb-4">
+        הנחיות אלו יוזרקו לכל יצירת מאמר וסיכום — פורמט, סגנון, דגשים, מבנה. ישמרו בכל הפקות.
+      </p>
+      <Textarea
+        value={activeText}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={`לדוגמה:\n- כתוב בעברית פורמלית, גוף שלישי\n- מבנה: כותרת → הקדמה (2 משפטים) → 3 נקודות עיקריות → סיכום\n- הדגש השפעה על שוק הנדל"ן הישראלי\n- אל תשתמש בז'רגון טכני מורכב`}
+        className="min-h-[160px] text-sm font-mono leading-relaxed mb-3"
+        dir="rtl"
+      />
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!isDirty || save.isPending}
+          onClick={() => save.mutate()}
+          className="gap-1.5"
+        >
+          <Save className="h-3.5 w-3.5" />
+          {save.isPending ? "שומר..." : "שמור הנחיות"}
+        </Button>
+      </div>
+    </div>
+  );
+};
 
 interface IngestionRun {
   id: string;
@@ -367,6 +544,8 @@ const Admin = () => {
     <AppLayout>
       <div className="max-w-5xl space-y-6">
         <AiConfigSection />
+        <ApiKeysSection />
+        <WritingStyleSection />
 
         <div className="surface-card p-6">
           <h2 className="text-lg font-bold text-primary mb-1">מצב נתונים</h2>

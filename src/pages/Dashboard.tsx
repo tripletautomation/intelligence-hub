@@ -38,6 +38,7 @@ const Dashboard = () => {
   const log = useLogAction();
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
+  const [showRead, setShowRead] = useState(false);
   const [openItem, setOpenItem] = useState<Item | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
@@ -122,6 +123,7 @@ const Dashboard = () => {
       if (filter === "global" && it.region !== "global") return false;
       if (filter === "events" && it.item_type !== "event") return false;
       if (filter === "research" && it.item_type !== "research") return false;
+      if (!showRead && filter !== "unread" && st.read) return false;
       if (filter === "unread" && st.read) return false;
       if (filter === "saved" && !st.saved) return false;
       if (q) {
@@ -193,7 +195,7 @@ const Dashboard = () => {
         <KpiCard label="מקורות פעילים" value={kpi.activeSources} />
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-6 items-center">
         {filters.map((f) => (
           <button
             key={f.id}
@@ -208,6 +210,17 @@ const Dashboard = () => {
             {f.label}
           </button>
         ))}
+        <button
+          onClick={() => setShowRead((v) => !v)}
+          className={cn(
+            "px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors mr-auto",
+            showRead
+              ? "bg-secondary text-foreground border-border"
+              : "bg-card text-muted-foreground border-border hover:text-foreground"
+          )}
+        >
+          {showRead ? "הסתר נקראים" : "הצג נקראים"}
+        </button>
       </div>
 
       <div className="space-y-4">

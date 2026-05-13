@@ -1,4 +1,4 @@
-// generate-social-posts: Convert an article draft into 4 platform-specific posts (Hebrew)
+// generate-social-posts: LinkedIn English, LinkedIn Hebrew, Image Prompt
 // Saves results to public.social_posts (upsert by draft_id + platform)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
@@ -15,22 +15,39 @@ function getLightModel(provider: string): string {
 }
 
 interface SocialPosts {
-  linkedin: string;
-  facebook: string;
-  instagram: string;
-  twitter: string;
+  linkedin_en: string;
+  linkedin_he: string;
+  image_prompt: string;
 }
 
-const SYSTEM_PROMPT = `אתה מומחה שיווק דיגיטלי המתמחה בתחום הטכנולוגיה ומרכזי הנתונים.
-קבלת מאמר מקצועי ועליך להפוך אותו ל-4 פוסטים ייעודיים לרשתות חברתיות — כולם בעברית.
+async function getApiKey(admin: ReturnType<typeof createClient>, envName: string): Promise<string | undefined> {
+  const { data } = await admin.from("admin_api_keys").select("key_value").eq("key_name", envName).maybeSingle();
+  return data?.key_value || Deno.env.get(envName);
+}
 
-כללים לכל פלטפורמה:
-- LinkedIn: 800-1200 תווים. Thought Leadership מקצועי. ציר מרכזי ברור. 3-5 hashtags רלוונטיים בסוף.
-- Facebook: 400-600 תווים. טון חם ונגיש. שאלה מעניינת בסוף. 0-2 hashtags.
-- Instagram: 120-250 תווים. ויזואלי ותמציתי. 15-20 hashtags רלוונטיים בשורה נפרדת.
-- X/Twitter: עד 270 תווים. משפט אחד חד ומחודד + ציטוט/עובדה מרכזית. 1-2 hashtags.
+const SYSTEM_PROMPT = `You are a professional digital marketing expert specializing in data centers, cloud infrastructure, and enterprise technology.
+You will receive a Hebrew article and generate 3 outputs via the emit_social_posts tool:
 
-החזר אך ורק דרך הכלי emit_social_posts.`;
+1. linkedin_en — LinkedIn post in ENGLISH:
+   - 1000-1500 characters
+   - Professional Thought Leadership tone
+   - Clear main insight or takeaway
+   - 2-3 relevant English hashtags at the end (e.g. #DataCenter #CloudInfrastructure #TechIntel)
+
+2. linkedin_he — LinkedIn post in HEBREW:
+   - 1000-1500 characters
+   - Professional tone, Hebrew only
+   - Same structure as linkedin_en but adapted for Hebrew-speaking audience
+   - 2-3 relevant Hebrew hashtags at the end (e.g. #מרכזינתונים #תשתיותענן)
+
+3. image_prompt — Image generation prompt in ENGLISH:
+   - Detailed, vivid prompt for an AI image generator (Midjourney / DALL-E / Stable Diffusion)
+   - Describe the scene, mood, style, composition, lighting
+   - Should visually represent the article's theme
+   - Include style keywords: "professional photography", "corporate", "tech", "cinematic", etc.
+   - 100-200 words
+
+Return ONLY via the emit_social_posts tool. No free text.`;
 
 async function refineSinglePost(
   platform: string,
@@ -42,23 +59,23 @@ async function refineSinglePost(
   modelId: string,
 ): Promise<string> {
   const PLATFORM_LIMITS: Record<string, string> = {
-    linkedin: "800-1200 תווים, hashtags בסוף",
-    facebook: "400-600 תווים, שאלה בסוף, 0-2 hashtags",
-    instagram: "120-250 תווים + 15-20 hashtags בשורה נפרדת",
-    twitter: "עד 270 תווים, חד ומחודד",
+    linkedin_en: "1000-1500 characters, English, professional tone, 2-3 English hashtags at end",
+    linkedin_he: "1000-1500 תווים, עברית, טון מקצועי, 2-3 האשטגים עבריים בסוף",
+    image_prompt: "100-200 words, detailed scene description for AI image generator, English",
   };
-  const sys = `אתה מומחה שיווק דיגיטלי. קבלת פוסט ל-${platform} ועליך לערוך אותו לפי הנחיה ספציפית.
-החזר את הפוסט המעודכן בלבד — ללא הסבר, ללא מרכאות.
-שמור על מגבלות הפלטפורמה: ${PLATFORM_LIMITS[platform] ?? ""}.`;
-  const userPrompt = `מאמר מקורי — כותרת: "${article.title}"
-פתיח: ${(article.intro ?? "").slice(0, 200)}
+  const isHebrew = platform === "linkedin_he";
+  const sys = isHebrew
+    ? `אתה מומחה שיווק דיגיטלי. ערוך את הפוסט לפי הנחיה ספציפית.\nהחזר את הפוסט המעודכן בלבד.\nמגבלות: ${PLATFORM_LIMITS[platform] ?? ""}`
+    : `You are a digital marketing expert. Edit the post according to the specific instruction.\nReturn only the updated post.\nConstraints: ${PLATFORM_LIMITS[platform] ?? ""}`;
+  const userPrompt = `Article title: "${article.title}"
+Intro: ${(article.intro ?? "").slice(0, 200)}
 
-פוסט ${platform} נוכחי:
+Current ${platform} post:
 ${currentContent}
 
-הנחייה לעריכה: ${instruction}
+Edit instruction: ${instruction}
 
-החזר את הפוסט המעודכן בלבד:`;
+Return only the updated post:`;
 
   let text = "";
   if (provider === "anthropic") {
@@ -83,7 +100,7 @@ ${currentContent}
     const j = await res.json();
     text = j?.choices?.[0]?.message?.content ?? "";
   }
-  if (!text) throw new Error("AI לא החזיר תוצאה");
+  if (!text) throw new Error("AI did not return a result");
   return text.trim();
 }
 
@@ -93,30 +110,29 @@ async function generatePosts(
   provider: string,
   modelId: string,
 ): Promise<SocialPosts> {
-  const userPrompt = `כותרת: ${article.title}
+  const userPrompt = `Article title: ${article.title}
 
-פתיח: ${article.intro}
+Intro (Hebrew): ${article.intro}
 
-גוף: ${article.body}
+Body (Hebrew): ${article.body}
 
-סיכום: ${article.closing}
+Closing (Hebrew): ${article.closing}
 
-הפק פוסטים ל-4 פלטפורמות לפי ההנחיות.`;
+Generate all 3 outputs as specified.`;
 
   const tool = {
     type: "function",
     function: {
       name: "emit_social_posts",
-      description: "Emit 4 platform-specific social media posts",
+      description: "Emit LinkedIn EN, LinkedIn HE, and Image Prompt",
       parameters: {
         type: "object",
         properties: {
-          linkedin: { type: "string", description: "פוסט LinkedIn — מקצועי, 800-1200 תווים, hashtags בסוף" },
-          facebook: { type: "string", description: "פוסט Facebook — נגיש, 400-600 תווים, שאלה בסוף" },
-          instagram: { type: "string", description: "פוסט Instagram — תמציתי, 120-250 תווים + hashtags בשורה נפרדת" },
-          twitter: { type: "string", description: "פוסט X/Twitter — עד 270 תווים, חד ומחודד" },
+          linkedin_en: { type: "string", description: "LinkedIn post in English — 1000-1500 chars, professional, 2-3 English hashtags" },
+          linkedin_he: { type: "string", description: "LinkedIn post in Hebrew — 1000-1500 chars, professional, 2-3 Hebrew hashtags" },
+          image_prompt: { type: "string", description: "Detailed image generation prompt in English — 100-200 words for Midjourney/DALL-E" },
         },
-        required: ["linkedin", "facebook", "instagram", "twitter"],
+        required: ["linkedin_en", "linkedin_he", "image_prompt"],
         additionalProperties: false,
       },
     },
@@ -127,11 +143,7 @@ async function generatePosts(
   if (provider === "anthropic") {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
+      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
       body: JSON.stringify({
         model: modelId,
         max_tokens: 2048,
@@ -144,7 +156,7 @@ async function generatePosts(
     if (!res.ok) throw new Error(`Anthropic error ${res.status}: ${await res.text()}`);
     const j = await res.json();
     const toolUse = j?.content?.find((b: any) => b.type === "tool_use");
-    if (!toolUse?.input) throw new Error("AI לא החזיר תוצאה");
+    if (!toolUse?.input) throw new Error("AI did not return a valid result");
     argsJson = JSON.stringify(toolUse.input);
   } else if (provider === "openai") {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -161,7 +173,6 @@ async function generatePosts(
     const j = await res.json();
     argsJson = j?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments ?? "";
   } else {
-    // Lovable AI Gateway (default)
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -177,7 +188,7 @@ async function generatePosts(
     argsJson = j?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments ?? "";
   }
 
-  if (!argsJson) throw new Error("AI לא החזיר תוצאה תקפה");
+  if (!argsJson) throw new Error("AI did not return a valid result");
   return JSON.parse(argsJson) as SocialPosts;
 }
 
@@ -210,17 +221,17 @@ Deno.serve(async (req) => {
       .from("article_drafts").select("title,intro,body,closing").eq("id", draftId).maybeSingle();
     if (draftErr || !draft) return json({ error: "draft not found" }, 404);
 
-    // Load AI config — use light (fast/cheap) model tier for social post formatting
+    // Load AI config — use light model for social formatting
     const { data: aiConfig } = await admin
       .from("ai_config").select("provider,model_id").eq("id", "default").maybeSingle();
     const provider = aiConfig?.provider ?? "openai";
     const modelId = getLightModel(provider);
 
-    const apiKey =
-      provider === "anthropic" ? Deno.env.get("ANTHROPIC_API_KEY") :
-      provider === "openai" ? Deno.env.get("OPENAI_API_KEY") :
-      Deno.env.get("LOVABLE_API_KEY");
-
+    const apiKey = await getApiKey(admin,
+      provider === "anthropic" ? "ANTHROPIC_API_KEY" :
+      provider === "openai" ? "OPENAI_API_KEY" :
+      "LOVABLE_API_KEY"
+    );
     if (!apiKey) return json({ error: `API key missing for provider: ${provider}` }, 500);
 
     // Refine a single platform post
@@ -238,8 +249,7 @@ Deno.serve(async (req) => {
 
     const posts = await generatePosts(draft as any, apiKey, provider, modelId);
 
-    // Upsert 4 posts
-    const rows = (["linkedin", "facebook", "instagram", "twitter"] as const).map((platform) => ({
+    const rows = (["linkedin_en", "linkedin_he", "image_prompt"] as const).map((platform) => ({
       draft_id: draftId,
       user_id: userId,
       platform,
