@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -463,10 +464,9 @@ const DraftDetail = () => {
                     }
                   </div>
                 </div>
-                <Textarea id={sec} value={(form[sec] as string) ?? ""}
+                <AutoResizeTextarea id={sec} value={(form[sec] as string) ?? ""}
                   onChange={(e) => setForm((f) => ({ ...f, [sec]: e.target.value }))}
-                  rows={sec === "body" ? 16 : 5}
-                  className="leading-relaxed" />
+                  minRows={sec === "body" ? 10 : 5} />
               </div>
             ))}
           </Card>
@@ -670,10 +670,10 @@ const DraftDetail = () => {
                       )}
                     </div>
 
-                    <Textarea
+                    <AutoResizeTextarea
                       value={content}
-                      rows={platform.isPrompt ? 6 : 10}
-                      className={cn("text-sm leading-relaxed resize-y", platform.isPrompt && "font-mono text-xs")}
+                      minRows={platform.isPrompt ? 5 : 8}
+                      className={cn("text-sm", platform.isPrompt && "font-mono text-xs")}
                       dir={platform.id === "linkedin_he" ? "rtl" : "ltr"}
                       readOnly={platform.isPrompt}
                       onChange={(e) => setSocialPosts((p) => p ? { ...p, [platform.id]: e.target.value } : p)}

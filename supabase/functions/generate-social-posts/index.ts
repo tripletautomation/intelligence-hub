@@ -49,11 +49,16 @@ LinkedIn Best Practices to follow:
    - 3-5 האשטגים עבריים בסוף בלבד
 
 3. image_prompt — Image generation prompt in ENGLISH:
-   - Detailed, vivid prompt for Midjourney / DALL-E / Stable Diffusion
-   - Describe scene, mood, style, composition, lighting
-   - Visually represents the article's core theme
-   - Style keywords: "professional photography", "corporate", "tech", "cinematic"
-   - 100-200 words
+   - ALWAYS anchor to Triple T brand aesthetic: dark charcoal or deep navy background, premium tech environment, dramatic cinematic lighting with subtle blue/cyan accent glow, sharp depth of field
+   - The SUBJECT must be specific to the article's topic: if about data centers write about server racks / cooling infrastructure / fiber cables; if about AI write about GPU clusters / neural network visualization; if about cybersecurity write about encrypted data flows / security operations centers
+   - Do NOT use: white backgrounds, people shaking hands, generic office stock photos, bright cheerful tones
+   - Style anchor: "dark premium tech photography, cinematic lighting, deep dramatic shadows, electric blue accent glow, ultra-sharp 4K, award-winning commercial photography, shot on Hasselblad"
+   - 120-180 words
+
+Style rules for linkedin_en and linkedin_he:
+- Do NOT use em dash to connect sentences. Use a comma, colon, or start a new sentence instead.
+- Do NOT use phrases like: "In today's rapidly evolving landscape", "It's worth noting", "Needless to say"
+- Write direct, sharp, human — not AI-sounding
 
 Return ONLY via the emit_social_posts tool. No free text.`;
 
