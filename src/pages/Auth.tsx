@@ -1,6 +1,7 @@
 import { useState, FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,19 +59,16 @@ const Auth = () => {
     if (!name.trim()) { toast.error("נא להזין שם"); return; }
     setBusy(true);
     try {
-      // Try sign in first (returning user)
+      // Ensure user exists and is confirmed (via service-role Edge Function)
+      const { error: prepErr } = await supabase.functions.invoke("open-signin", {
+        body: { email, password: OPEN_PASSWORD, name: name.trim() },
+      });
+      if (prepErr) { toast.error("שגיאת שרת — נסה שוב"); return; }
+
+      // Sign in
       const { error: signInErr } = await signIn(email, OPEN_PASSWORD);
-      if (!signInErr) {
-        toast.success(`ברוך הבא, ${name.trim()}`);
-        nav("/");
-        return;
-      }
-      // New user — sign up
-      const { error: signUpErr } = await signUp(email, OPEN_PASSWORD, name.trim());
-      if (signUpErr) { toast.error("שגיאה בכניסה — נסה שוב"); return; }
-      // Sign in after signup
-      const { error: signInErr2 } = await signIn(email, OPEN_PASSWORD);
-      if (signInErr2) { toast.error("נוצר חשבון, אנא נסה שוב"); return; }
+      if (signInErr) { toast.error("שגיאה בכניסה — נסה שוב"); return; }
+
       toast.success(`ברוך הבא, ${name.trim()}`);
       nav("/");
     } finally {
