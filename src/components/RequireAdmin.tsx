@@ -4,9 +4,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useAdmin";
 import { Shield } from "lucide-react";
 
+const DEV_BYPASS = import.meta.env.VITE_DEV_BYPASS === 'true';
+
 export const RequireAdmin = ({ children }: { children: ReactNode }) => {
   const { user, loading } = useAuth();
   const { data: isAdmin, isLoading: adminLoading } = useIsAdmin();
+  if (DEV_BYPASS) return <>{children}</>;
 
   if (loading || adminLoading) {
     return (

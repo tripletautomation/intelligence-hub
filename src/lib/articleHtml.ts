@@ -3,6 +3,7 @@ export interface ArticleHtmlOpts {
   intro: string;
   body: string;
   closing: string;
+  contentType?: string;
 }
 
 function escHtml(s: string): string {
@@ -22,28 +23,32 @@ function renderParagraphs(content: string): string {
 }
 
 export function buildEmailBodyHtml(opts: ArticleHtmlOpts): string {
-  const { title, intro, body, closing } = opts;
+  const { title, intro, body, closing, contentType } = opts;
+  const isEn = contentType === "blog_en";
+  const dir = isEn ? "ltr" : "rtl";
+  const align = isEn ? "left" : "right";
   const paragraphs = [intro, body, closing]
     .filter((s) => s?.trim())
     .join("\n\n")
     .split(/\n\n+/)
     .map(
       (p) =>
-        `<p style="font-size:15px;line-height:1.9;color:#1a1a1a;margin:0 0 16px 0;direction:rtl;text-align:right;">${escHtml(p.trim()).replace(/\n/g, "<br>")}</p>`,
+        `<p style="font-size:15px;line-height:1.9;color:#1a1a1a;margin:0 0 16px 0;direction:${dir};text-align:${align};">${escHtml(p.trim()).replace(/\n/g, "<br>")}</p>`,
     )
     .join("");
   return (
-    `<div dir="rtl" style="font-family:Arial,Helvetica,sans-serif;max-width:680px;direction:rtl;text-align:right;">` +
-    `<h2 style="font-size:20px;font-weight:700;color:#1e293b;margin:0 0 20px 0;line-height:1.4;direction:rtl;">${escHtml(title)}</h2>` +
+    `<div dir="${dir}" style="font-family:Arial,Helvetica,sans-serif;max-width:680px;direction:${dir};text-align:${align};">` +
+    `<h2 style="font-size:20px;font-weight:700;color:#1e293b;margin:0 0 20px 0;line-height:1.4;direction:${dir};text-align:${align};">${escHtml(title)}</h2>` +
     paragraphs +
-    `<p style="font-size:11px;color:#94a3b8;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:10px;direction:rtl;">Intelligence Hub · Triple-T</p>` +
+    `<p style="font-size:11px;color:#94a3b8;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:10px;direction:${dir};text-align:${align};">Intelligence Hub · Triple-T</p>` +
     `</div>`
   );
 }
 
 export function buildEmlFile(opts: ArticleHtmlOpts): string {
   const plain = buildPlainText(opts);
-  const htmlBody = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"></head><body>${buildEmailBodyHtml(opts)}</body></html>`;
+  const dir = opts.contentType === "blog_en" ? "ltr" : "rtl";
+  const htmlBody = `<!DOCTYPE html><html dir="${dir}"><head><meta charset="UTF-8"></head><body>${buildEmailBodyHtml(opts)}</body></html>`;
   const boundary = `=_Part_${Math.random().toString(36).slice(2, 10)}`;
 
   // RFC 2047 base64 subject for Hebrew characters
@@ -84,12 +89,15 @@ function buildPlainText(opts: ArticleHtmlOpts): string {
 
 export function buildArticleHtml(opts: ArticleHtmlOpts): string {
   const { title, intro, body, closing } = opts;
+  const isEn = opts.contentType === "blog_en";
+  const dir = isEn ? "ltr" : "rtl";
+  const lang = isEn ? "en" : "he";
   const plain = buildPlainText(opts);
   const emailBodyHtml = buildEmailBodyHtml(opts);
   const mailtoHref = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(plain)}`;
 
   return `<!DOCTYPE html>
-<html dir="rtl" lang="he">
+<html dir="${dir}" lang="${lang}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -101,7 +109,7 @@ export function buildArticleHtml(opts: ArticleHtmlOpts): string {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
     color: #1a1a1a;
     padding: 32px 16px;
-    direction: rtl;
+    direction: ${dir};
   }
   .toolbar {
     max-width: 680px;
@@ -186,7 +194,7 @@ export function buildArticleHtml(opts: ArticleHtmlOpts): string {
   </div>
   <div class="footer">Intelligence Hub · Triple-T</div>
 </div>
-<div id="email-preview" style="position:absolute;left:-9999px;top:0;width:680px;" dir="rtl" aria-hidden="true">${emailBodyHtml}</div>
+<div id="email-preview" style="position:absolute;left:-9999px;top:0;width:680px;" dir="${dir}" aria-hidden="true">${emailBodyHtml}</div>
 <script>
 async function copyForEmail() {
   var msg = document.getElementById('copy-msg');

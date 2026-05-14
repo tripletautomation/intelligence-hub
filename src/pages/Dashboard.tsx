@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/AppLayout";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDrawer } from "@/components/ItemDrawer";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Sparkles, X, FileText, Loader2, LayoutList, Tag } from "lucide-react";
+import { RefreshCw, Search, LayoutList, Tag, ChevronDown, ChevronUp, Zap, Calendar, Clock, Archive } from "lucide-react";
+import { NewsSearchPanel } from "@/components/NewsSearchPanel";
 import {
   useItems,
   useSources,
@@ -20,7 +21,6 @@ import { formatHeRelative } from "@/lib/format";
 import { toast } from "sonner";
 import type { Item, ActionType, TopicCategory } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useNavigate } from "react-router-dom";
 
 type Filter = "all" | "israel" | "global" | "events" | "research" | "unread" | "saved";
 type GroupMode = "time" | "topic";
@@ -68,7 +68,6 @@ function getTopicBucket(item: Item, categories: TopicCategory[]): string {
 
 const Dashboard = () => {
   const qc = useQueryClient();
-  const nav = useNavigate();
   const { data: items = [], dataUpdatedAt, refetch: refetchItems } = useItems();
   const { data: sources = [] } = useSources();
   const { data: actions } = useUserActions();
@@ -82,8 +81,7 @@ const Dashboard = () => {
   const [showRead, setShowRead] = useState(false);
   const [openItem, setOpenItem] = useState<Item | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectMode, setSelectMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [newsSearchOpen, setNewsSearchOpen] = useState(false);
   const [groupMode, setGroupMode] = useState<GroupMode>("time");
   const [collapsedBuckets, setCollapsedBuckets] = useState<Set<string>>(new Set(["older"]));
 
@@ -94,39 +92,6 @@ const Dashboard = () => {
       else next.add(bucket);
       return next;
     });
-
-  const toggleSelected = (id: string) =>
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  const exitSelectMode = () => {
-    setSelectMode(false);
-    setSelectedIds(new Set());
-  };
-
-  const generateArticle = useMutation({
-    mutationFn: async () => {
-      const ids = Array.from(selectedIds);
-      if (ids.length === 0) throw new Error("בחר לפחות פריט אחד");
-      const { data, error } = await supabase.functions.invoke("generate-article", {
-        body: { item_ids: ids },
-      });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-      return (data as any).draft_id as string;
-    },
-    onSuccess: (draftId) => {
-      toast.success("טיוטת מאמר נוצרה");
-      exitSelectMode();
-      qc.invalidateQueries({ queryKey: ["article_drafts"] });
-      nav(`/drafts/${draftId}`);
-    },
-    onError: (e: Error) => toast.error(e.message ?? "שגיאה ביצירת המאמר"),
-  });
 
   const lastUpdatedIso = useMemo(() => {
     const ts = items
@@ -161,6 +126,17 @@ const Dashboard = () => {
   const states = useMemo(() => deriveItemStates(actions), [actions]);
   const sourcesById = useMemo(() => new Map(sources.map((s) => [s.id, s])), [sources]);
 
+  // Compute effective score per item (relevance + user tag boosts)
+  const effectiveScore = useMemo(() => {
+    const boost = prefs?.user_relevance_boost ?? {};
+    const map = new Map<string, number>();
+    for (const item of items) {
+      const tagBoost = item.tags_ai.reduce((sum, tag) => sum + (boost[tag] ?? 0), 0);
+      map.set(item.id, (item.relevance_score ?? 0) + tagBoost);
+    }
+    return map;
+  }, [items, prefs?.user_relevance_boost]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const hiddenSet = new Set(prefs?.hidden_item_ids ?? []);
@@ -183,7 +159,7 @@ const Dashboard = () => {
     });
   }, [items, states, filter, search, prefs?.hidden_item_ids, showRead]);
 
-  // Sort filtered by effective score (descending) within each bucket
+  // Sort filtered by effective score (descending)
   const sortedFiltered = useMemo(
     () => [...filtered].sort((a, b) => (effectiveScore.get(b.id) ?? 0) - (effectiveScore.get(a.id) ?? 0)),
     [filtered, effectiveScore],
@@ -215,7 +191,7 @@ const Dashboard = () => {
       if (val.length === 0) map.delete(key);
     }
     return map;
-  }, [filtered, topicCategories]);
+  }, [sortedFiltered, topicCategories]);
 
   const kpi = useMemo(() => {
     const today = new Date();
@@ -237,17 +213,6 @@ const Dashboard = () => {
     log.mutate({ itemId: item.id, action, itemTags: item.tags_ai });
   };
 
-  // Compute effective score per item (relevance + user tag boosts)
-  const effectiveScore = useMemo(() => {
-    const boost = prefs?.user_relevance_boost ?? {};
-    const map = new Map<string, number>();
-    for (const item of items) {
-      const tagBoost = item.tags_ai.reduce((sum, tag) => sum + (boost[tag] ?? 0), 0);
-      map.set(item.id, (item.relevance_score ?? 0) + tagBoost);
-    }
-    return map;
-  }, [items, prefs?.user_relevance_boost]);
-
   const renderItem = (item: Item) => (
     <ItemCard
       key={item.id}
@@ -256,9 +221,7 @@ const Dashboard = () => {
       state={states.get(item.id) ?? { read: false, saved: false, liked: false, disliked: false }}
       onOpen={() => setOpenItem(item)}
       onAction={(a) => handleAction(item, a)}
-      selectable={selectMode}
-      selected={selectedIds.has(item.id)}
-      onToggleSelected={() => toggleSelected(item.id)}
+      compact
       onHide={() => {
         hideItem.mutate(
           { itemId: item.id, hide: true },
@@ -286,33 +249,30 @@ const Dashboard = () => {
             "טרם עודכן"
           )}
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button size="sm" variant="ghost" onClick={() => nav("/drafts")} className="gap-1.5">
-            <FileText className="h-4 w-4" /> טיוטות מאמרים
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setNewsSearchOpen(true)}
+            className="gap-2"
+          >
+            <Search className="h-4 w-4" />
+            חפש ידיעות
           </Button>
-          {!selectMode ? (
-            <Button size="sm" variant="outline" onClick={() => setSelectMode(true)} className="gap-1.5">
-              <Sparkles className="h-4 w-4" /> צור מאמר מהנבחרים
-            </Button>
-          ) : (
-            <Button size="sm" variant="ghost" onClick={exitSelectMode} className="gap-1.5">
-              <X className="h-4 w-4" /> בטל בחירה
-            </Button>
-          )}
-          <Button size="sm" variant="outline" onClick={handleRefresh} disabled={refreshing} className="gap-1.5">
+          <Button
+            size="sm"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="gap-2 bg-accent hover:bg-accent/90 text-accent-foreground font-semibold shadow-sm"
+          >
             <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
-            {refreshing ? "מרענן..." : "רענן עכשיו"}
+            {refreshing ? "מחפש ידיעות..." : "קבל ידיעות חדשות"}
           </Button>
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <KpiCard label="פריטים חדשים היום" value={kpi.newToday} />
-        <KpiCard label="לא נקראו" value={kpi.unread} accent />
-        <KpiCard label="אירועים קרובים" value={kpi.upcoming} />
-        <KpiCard label="מקורות פעילים" value={kpi.activeSources} />
-      </div>
+      {/* KPI strip */}
+      <KpiStrip newToday={kpi.newToday} unread={kpi.unread} upcoming={kpi.upcoming} activeSources={kpi.activeSources} />
 
       {/* Filters + group toggle */}
       <div className="flex flex-wrap gap-2 mb-6 items-center">
@@ -374,7 +334,7 @@ const Dashboard = () => {
       {filtered.length === 0 ? (
         <div className="surface-card p-12 text-center text-muted-foreground">אין פריטים תואמים לסינון</div>
       ) : groupMode === "time" ? (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {TIME_BUCKETS.map(({ id, label }) => {
             const bucketItems = byTime.get(id) ?? [];
             if (bucketItems.length === 0) return null;
@@ -385,19 +345,16 @@ const Dashboard = () => {
                 label={label}
                 count={bucketItems.length}
                 collapsed={isCollapsed}
+                variant={id as BucketVariant}
                 onToggle={() => toggleBucket(id)}
               >
-                {!isCollapsed && (
-                  <div className="space-y-3 mt-3">
-                    {bucketItems.map(renderItem)}
-                  </div>
-                )}
+                {bucketItems.map(renderItem)}
               </BucketSection>
             );
           })}
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {Array.from(byTopic.entries()).map(([name, topicItems]) => {
             const isCollapsed = collapsedBuckets.has(name);
             return (
@@ -406,13 +363,10 @@ const Dashboard = () => {
                 label={name}
                 count={topicItems.length}
                 collapsed={isCollapsed}
+                variant="topic"
                 onToggle={() => toggleBucket(name)}
               >
-                {!isCollapsed && (
-                  <div className="space-y-3 mt-3">
-                    {topicItems.map(renderItem)}
-                  </div>
-                )}
+                {topicItems.map(renderItem)}
               </BucketSection>
             );
           })}
@@ -428,67 +382,121 @@ const Dashboard = () => {
         onAction={(a) => openItem && handleAction(openItem, a)}
       />
 
-      {selectMode && (
-        <div className="fixed bottom-6 inset-x-0 z-40 px-4 pointer-events-none">
-          <div className="max-w-3xl mx-auto bg-card border border-border shadow-lg rounded-2xl px-5 py-3 flex items-center gap-4 pointer-events-auto">
-            <div className="text-sm">
-              <span className="font-bold text-primary">{selectedIds.size}</span>
-              <span className="text-muted-foreground"> פריטים נבחרו</span>
-              <span className="text-muted-foreground"> · עד 10</span>
-            </div>
-            <div className="flex-1" />
-            <Button
-              size="sm"
-              onClick={() => generateArticle.mutate()}
-              disabled={selectedIds.size === 0 || selectedIds.size > 10 || generateArticle.isPending}
-              className="gap-1.5"
-            >
-              {generateArticle.isPending
-                ? <Loader2 className="h-4 w-4 animate-spin" />
-                : <Sparkles className="h-4 w-4" />}
-              {generateArticle.isPending ? "יוצר מאמר..." : "צור מאמר"}
-            </Button>
-          </div>
-        </div>
-      )}
+      <NewsSearchPanel open={newsSearchOpen} onOpenChange={setNewsSearchOpen} />
     </AppLayout>
   );
 };
 
-const KpiCard = ({ label, value, accent }: { label: string; value: number; accent?: boolean }) => (
-  <div className="surface-card p-5">
-    <div className="text-xs text-muted-foreground mb-2">{label}</div>
-    <div className={cn("text-3xl font-bold", accent ? "text-accent" : "text-primary")}>{value}</div>
+const KpiStrip = ({ newToday, unread, upcoming, activeSources }: {
+  newToday: number; unread: number; upcoming: number; activeSources: number;
+}) => (
+  <div className="flex flex-wrap items-center gap-x-6 gap-y-2 bg-card/50 border border-border rounded-xl px-5 py-2.5 mb-6 text-sm">
+    <div className="flex items-center gap-2">
+      <span className="text-muted-foreground">חדשים היום</span>
+      <span className="font-bold text-foreground tabular-nums">{newToday}</span>
+    </div>
+    <div className="w-px h-4 bg-border hidden sm:block" />
+    <div className="flex items-center gap-2">
+      <span className="text-muted-foreground">לא נקראו</span>
+      <span className="font-bold text-accent tabular-nums">{unread}</span>
+    </div>
+    <div className="w-px h-4 bg-border hidden sm:block" />
+    <div className="flex items-center gap-2">
+      <span className="text-muted-foreground">אירועים קרובים</span>
+      <span className="font-bold text-foreground tabular-nums">{upcoming}</span>
+    </div>
+    <div className="w-px h-4 bg-border hidden sm:block" />
+    <div className="flex items-center gap-2">
+      <span className="text-muted-foreground">מקורות פעילים</span>
+      <span className="font-bold text-foreground tabular-nums">{activeSources}</span>
+    </div>
   </div>
 );
+
+type BucketVariant = "today" | "week" | "month" | "older" | "topic";
+
+const BUCKET_CONFIG: Record<BucketVariant, {
+  borderColor: string;
+  badgeClass: string;
+  iconClass: string;
+  Icon: React.FC<{ className?: string }>;
+  pulse?: boolean;
+}> = {
+  today: {
+    borderColor: "border-l-accent",
+    badgeClass: "bg-accent/15 text-accent border border-accent/30",
+    iconClass: "text-accent",
+    Icon: Zap,
+    pulse: true,
+  },
+  week: {
+    borderColor: "border-l-blue-400/60",
+    badgeClass: "bg-blue-500/10 text-blue-400 border border-blue-400/20",
+    iconClass: "text-blue-400",
+    Icon: Clock,
+  },
+  month: {
+    borderColor: "border-l-slate-400/50",
+    badgeClass: "bg-slate-500/10 text-slate-400 border border-slate-400/20",
+    iconClass: "text-slate-400",
+    Icon: Calendar,
+  },
+  older: {
+    borderColor: "border-l-slate-600/40",
+    badgeClass: "bg-slate-700/20 text-slate-500 border border-slate-600/20",
+    iconClass: "text-slate-500",
+    Icon: Archive,
+  },
+  topic: {
+    borderColor: "border-l-violet-400/60",
+    badgeClass: "bg-violet-500/10 text-violet-400 border border-violet-400/20",
+    iconClass: "text-violet-400",
+    Icon: Tag,
+  },
+};
 
 const BucketSection = ({
   label,
   count,
   collapsed,
   onToggle,
+  variant = "topic",
   children,
 }: {
   label: string;
   count: number;
   collapsed: boolean;
   onToggle: () => void;
+  variant?: BucketVariant;
   children: React.ReactNode;
-}) => (
-  <div>
-    <button
-      onClick={onToggle}
-      className="flex items-center gap-2 w-full text-right group mb-1"
-    >
-      <span className="text-sm font-semibold text-foreground">{label}</span>
-      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{count}</span>
-      <span className="text-xs text-muted-foreground mr-auto group-hover:text-foreground transition-colors">
-        {collapsed ? "הצג ▼" : "כווץ ▲"}
-      </span>
-    </button>
-    <div className="border-b border-border mb-3" />
-    {children}
-  </div>
-);
+}) => {
+  const cfg = BUCKET_CONFIG[variant];
+  const Icon = cfg.Icon;
+  return (
+    <div className={cn("border-l-2 pl-4 transition-all", cfg.borderColor)}>
+      <button
+        onClick={onToggle}
+        className="flex items-center gap-3 w-full text-right group py-2"
+      >
+        <Icon className={cn("h-4 w-4 shrink-0", cfg.iconClass, cfg.pulse && "animate-pulse")} />
+        <span className="text-sm font-bold text-foreground tracking-tight">{label}</span>
+        <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full tabular-nums", cfg.badgeClass)}>
+          {count}
+        </span>
+        <span className="mr-auto">
+          {collapsed
+            ? <ChevronDown className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+            : <ChevronUp className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+          }
+        </span>
+      </button>
+      {!collapsed && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 mt-2 pb-2">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default Dashboard;

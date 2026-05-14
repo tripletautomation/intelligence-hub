@@ -2,6 +2,10 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
+const DEV_BYPASS = import.meta.env.VITE_DEV_BYPASS === 'true';
+const DEV_EMAIL = import.meta.env.VITE_DEV_EMAIL as string | undefined;
+const DEV_PASSWORD = import.meta.env.VITE_DEV_PASSWORD as string | undefined;
+
 interface AuthCtx {
   user: User | null;
   session: Session | null;
@@ -24,6 +28,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [recoveryMode, setRecoveryMode] = useState(false);
 
   useEffect(() => {
+    if (DEV_BYPASS && DEV_EMAIL && DEV_PASSWORD) {
+      // Auto sign-in for local dev — no login screen needed
+      supabase.auth.signInWithPassword({ email: DEV_EMAIL, password: DEV_PASSWORD }).then(({ data }) => {
+        setSession(data.session);
+        setUser(data.session?.user ?? null);
+        setLoading(false);
+      });
+      return;
+    }
     // Set listener BEFORE getSession to avoid missed events
     const { data: sub } = supabase.auth.onAuthStateChange((evt, s) => {
       if (evt === "PASSWORD_RECOVERY") setRecoveryMode(true);

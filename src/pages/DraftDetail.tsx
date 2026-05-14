@@ -394,7 +394,7 @@ const DraftDetail = () => {
   };
 
   const copyHtmlToClipboard = async () => {
-    const opts = { title: form.title, intro: form.intro ?? "", body: form.body ?? "", closing: form.closing ?? "" };
+    const opts = { title: form.title, intro: form.intro ?? "", body: form.body ?? "", closing: form.closing ?? "", contentType: draft?.content_type ?? undefined };
     const html = buildEmailBodyHtml(opts);
     try {
       await navigator.clipboard.write([
@@ -497,41 +497,54 @@ const DraftDetail = () => {
         <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
           {/* Editor */}
           <Card className="p-6 space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="title" className="text-xs uppercase tracking-wider text-muted-foreground">כותרת</Label>
-              <Input id="title" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} className="text-xl font-bold" />
-            </div>
-            {(["intro", "body", "closing"] as Section[]).map((sec) => (
-              <div key={sec} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">{SECTION_LABELS[sec]}</Label>
-                  <div className="flex items-center gap-0.5">
-                    {refiningSection === sec
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin text-accent mx-1" />
-                      : AI_ACTIONS.map((action) => (
-                          <button key={action.id} type="button"
-                            disabled={refineLoading}
-                            title={action.label}
-                            onClick={() => {
-                              if (action.id === "rephrase") {
-                                setActiveSection(sec);
-                                setShowRephraseInput((v) => activeSection === sec ? !v : true);
-                              } else {
-                                runRefine(action.id, undefined, sec);
-                              }
-                            }}
-                            className="p-1.5 rounded text-muted-foreground hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-40">
-                            {action.icon}
-                          </button>
-                        ))
-                    }
+            {(() => {
+              const isEn = draft?.content_type === "blog_en";
+              const textDir = isEn ? "ltr" : "rtl";
+              const textAlign = isEn ? "text-left" : "text-right";
+              return (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="title" className="text-xs uppercase tracking-wider text-muted-foreground">כותרת</Label>
+                    <Input id="title" value={form.title} dir={textDir}
+                      onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                      className={cn("text-xl font-bold", textAlign)} />
                   </div>
-                </div>
-                <AutoResizeTextarea id={sec} value={(form[sec] as string) ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, [sec]: e.target.value }))}
-                  minRows={sec === "body" ? 10 : 5} />
-              </div>
-            ))}
+                  {(["intro", "body", "closing"] as Section[]).map((sec) => (
+                    <div key={sec} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs uppercase tracking-wider text-muted-foreground">{SECTION_LABELS[sec]}</Label>
+                        <div className="flex items-center gap-0.5">
+                          {refiningSection === sec
+                            ? <Loader2 className="h-3.5 w-3.5 animate-spin text-accent mx-1" />
+                            : AI_ACTIONS.map((action) => (
+                                <button key={action.id} type="button"
+                                  disabled={refineLoading}
+                                  title={action.label}
+                                  onClick={() => {
+                                    if (action.id === "rephrase") {
+                                      setActiveSection(sec);
+                                      setShowRephraseInput((v) => activeSection === sec ? !v : true);
+                                    } else {
+                                      runRefine(action.id, undefined, sec);
+                                    }
+                                  }}
+                                  className="p-1.5 rounded text-muted-foreground hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-40">
+                                  {action.icon}
+                                </button>
+                              ))
+                          }
+                        </div>
+                      </div>
+                      <AutoResizeTextarea id={sec} value={(form[sec] as string) ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, [sec]: e.target.value }))}
+                        minRows={sec === "body" ? 10 : 5}
+                        dir={textDir}
+                        className={textAlign} />
+                    </div>
+                  ))}
+                </>
+              );
+            })()}
           </Card>
 
           {/* Sidebar */}

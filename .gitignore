@@ -33,3 +33,4 @@ supabase/.temp/
 
 # Claude Code local settings
 .claude/
+.vercel

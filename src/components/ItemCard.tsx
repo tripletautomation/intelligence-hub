@@ -19,13 +19,89 @@ interface Props {
   hidden?: boolean;
   onHide?: () => void;
   onRestore?: () => void;
+  compact?: boolean;
 }
 
 export const ItemCard = ({
   item, source, state, onOpen, onAction,
   selectable, selected, onToggleSelected,
-  hidden, onHide, onRestore,
+  hidden, onHide, onRestore, compact,
 }: Props) => {
+  if (compact) {
+    return (
+      <article
+        className={cn(
+          "rounded-xl border border-border bg-card p-4 flex flex-col gap-2 cursor-pointer animate-fade-in",
+          "hover:border-accent/30 hover:shadow-sm transition-all",
+          state.read && "opacity-60",
+          selectable && selected && "ring-2 ring-accent border-accent",
+        )}
+        onClick={(e) => {
+          if (selectable) { e.preventDefault(); onToggleSelected?.(); return; }
+          onOpen();
+        }}
+      >
+        {selectable && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground" onClick={(e) => e.stopPropagation()}>
+            <Checkbox checked={!!selected} onCheckedChange={() => onToggleSelected?.()} aria-label="בחר פריט" />
+            <span>{selected ? "נבחר" : "סמן"}</span>
+          </div>
+        )}
+
+        {/* Metadata */}
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
+          <RegionBadge region={item.region} />
+          {source && <span className="font-medium text-foreground/60">{source.name}</span>}
+          <span className="mr-auto">{formatHeRelative(item.published_at)}</span>
+        </div>
+
+        {/* Title — 2 lines max */}
+        <h3 className="text-sm font-bold text-primary leading-snug line-clamp-2">{item.title_he}</h3>
+
+        {/* Tags — 3 max */}
+        {item.tags_ai.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {item.tags_ai.slice(0, 3).map((t) => (
+              <span key={t} className="text-xs bg-secondary text-secondary-foreground px-1.5 py-0.5 rounded">
+                #{t}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex items-center gap-1 mt-auto pt-1" onClick={(e) => e.stopPropagation()}>
+          <Button
+            variant="ghost" size="sm"
+            onClick={() => onAction(state.saved ? "unsave" : "save")}
+            className={cn("h-7 px-2 gap-1", state.saved && "text-accent")}
+          >
+            {state.saved ? <BookmarkCheck className="h-3.5 w-3.5" /> : <Bookmark className="h-3.5 w-3.5" />}
+          </Button>
+          <Button
+            variant={state.liked ? "secondary" : "ghost"} size="sm"
+            onClick={() => onAction("like")}
+            className={cn("h-7 px-2", state.liked && "text-accent")}
+            title="רלוונטי"
+          >
+            <ThumbsUp className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant={state.disliked ? "secondary" : "ghost"} size="sm"
+            onClick={() => onAction("dislike")}
+            className={cn("h-7 px-2", state.disliked && "text-destructive")}
+            title="לא רלוונטי"
+          >
+            <ThumbsDown className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onOpen} className="h-7 px-2 mr-auto text-xs text-muted-foreground hover:text-foreground">
+            קרא עוד
+          </Button>
+        </div>
+      </article>
+    );
+  }
+
   return (
     <article
       className={cn(

@@ -98,7 +98,7 @@ const Drafts = () => {
         day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
       }),
     })),
-    [rows, tab],
+    [rows, tab, contentFilter],
   );
 
   const updateStatus = useMutation({

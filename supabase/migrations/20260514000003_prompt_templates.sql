@@ -16,8 +16,8 @@ CREATE POLICY "authenticated read prompt_templates"
 CREATE POLICY "admin write prompt_templates"
   ON prompt_templates FOR ALL
   TO authenticated
-  USING (has_role('admin'::app_role))
-  WITH CHECK (has_role('admin'::app_role));
+  USING (public.has_role(auth.uid(), 'admin'))
+  WITH CHECK (public.has_role(auth.uid(), 'admin'));
 
 -- Seed with default prompt IDs (Edge Functions fall back to hardcoded if row missing)
 INSERT INTO prompt_templates (id, label, system_prompt) VALUES

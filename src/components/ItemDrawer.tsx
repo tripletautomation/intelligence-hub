@@ -64,24 +64,36 @@ export const ItemDrawer = ({ item, source, state, open, onOpenChange, onAction }
     onError: (e: Error) => toast.error(e.message ?? "שגיאה בסיכום"),
   });
 
-  const writeArticle = useMutation({
-    mutationFn: async () => {
-      if (!item) throw new Error("אין פריט");
-      const { data, error } = await supabase.functions.invoke("generate-article", {
-        body: { item_ids: [item.id] },
-      });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-      return (data as any).draft_id as string;
-    },
-    onSuccess: (draftId) => {
-      toast.success("טיוטת מאמר נוצרה");
+  type ContentTypeCreate = "linkedin" | "blog_he" | "blog_en";
+  const [generatingType, setGeneratingType] = useState<ContentTypeCreate | null>(null);
+
+  const createContent = async (type: ContentTypeCreate) => {
+    if (!item) return;
+    setGeneratingType(type);
+    try {
+      let draftId: string;
+      if (type === "linkedin") {
+        const { data, error } = await supabase.functions.invoke("generate-article", { body: { item_ids: [item.id] } });
+        if (error) throw error;
+        if ((data as any)?.error) throw new Error((data as any).error);
+        draftId = (data as any).draft_id;
+      } else {
+        const language = type === "blog_he" ? "he" : "en";
+        const { data, error } = await supabase.functions.invoke("generate-blog-post", { body: { item_ids: [item.id], language } });
+        if (error) throw error;
+        if ((data as any)?.error) throw new Error((data as any).error);
+        draftId = (data as any).draft_id;
+      }
+      toast.success("טיוטה נוצרה");
       qc.invalidateQueries({ queryKey: ["article_drafts"] });
       onOpenChange(false);
       nav(`/drafts/${draftId}`);
-    },
-    onError: (e: Error) => toast.error(e.message ?? "שגיאה ביצירת המאמר"),
-  });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה ביצירת התוכן");
+    } finally {
+      setGeneratingType(null);
+    }
+  };
 
   if (!item) return null;
 
@@ -201,22 +213,37 @@ export const ItemDrawer = ({ item, source, state, open, onOpenChange, onAction }
           )}
 
           {/* Write Article CTA */}
-          <div className="rounded-xl border border-accent/30 bg-accent/5 p-4 flex items-center justify-between gap-3">
+          <div className="rounded-xl border border-accent/30 bg-accent/5 p-4 space-y-3">
             <div>
-              <p className="text-sm font-medium text-primary">כתוב מאמר מידיעה זו</p>
-              <p className="text-xs text-muted-foreground">יצור טיוטת מאמר מלאה בלחיצה אחת</p>
+              <p className="text-sm font-medium text-primary">צור תוכן מידיעה זו</p>
+              <p className="text-xs text-muted-foreground">בחר פורמט — תיפתח טיוטה עם הנוסח המלא</p>
             </div>
-            <Button
-              size="sm"
-              onClick={() => writeArticle.mutate()}
-              disabled={writeArticle.isPending}
-              className="gap-1.5 shrink-0"
-            >
-              {writeArticle.isPending
-                ? <Loader2 className="h-4 w-4 animate-spin" />
-                : <FileText className="h-4 w-4" />}
-              {writeArticle.isPending ? "יוצר..." : "צור מאמר"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  { type: "linkedin", label: "מאמר LinkedIn" },
+                  { type: "blog_he", label: "בלוג עברית" },
+                  { type: "blog_en", label: "Blog English" },
+                ] as { type: ContentTypeCreate; label: string }[]
+              ).map(({ type, label }) => {
+                const isThis = generatingType === type;
+                return (
+                  <Button
+                    key={type}
+                    size="sm"
+                    variant={type === "linkedin" ? "default" : "outline"}
+                    onClick={() => createContent(type)}
+                    disabled={generatingType !== null}
+                    className="gap-1.5"
+                  >
+                    {isThis
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <FileText className="h-3.5 w-3.5" />}
+                    {isThis ? "יוצר..." : label}
+                  </Button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="flex items-center gap-1 flex-wrap pt-2 border-t border-border">

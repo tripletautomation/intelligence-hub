@@ -20,8 +20,8 @@ CREATE POLICY "authenticated read topic_categories"
 CREATE POLICY "admin write topic_categories"
   ON topic_categories FOR ALL
   TO authenticated
-  USING (has_role('admin'::app_role))
-  WITH CHECK (has_role('admin'::app_role));
+  USING (public.has_role(auth.uid(), 'admin'))
+  WITH CHECK (public.has_role(auth.uid(), 'admin'));
 
 -- Seed with default categories relevant to data centers / tech / finance
 INSERT INTO topic_categories (name, keywords, sort_order) VALUES

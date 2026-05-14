@@ -182,15 +182,17 @@ Deno.serve(async (req) => {
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
     // Read AI config — "article" row for writing, fall back to "default"
-    const [articleConfigRes, defaultConfigRes, writingStyleRes] = await Promise.all([
+    const [articleConfigRes, defaultConfigRes, writingStyleRes, linkedinTemplateRes] = await Promise.all([
       admin.from("ai_config").select("provider,model_id").eq("id", "article").maybeSingle(),
       admin.from("ai_config").select("provider,model_id").eq("id", "default").maybeSingle(),
       admin.from("ai_config").select("prompt_text").eq("id", "writing_style").maybeSingle(),
+      admin.from("prompt_templates").select("system_prompt").eq("id", "article_linkedin").maybeSingle(),
     ]);
     const aiConfig = articleConfigRes.data ?? defaultConfigRes.data;
     const provider: string = aiConfig?.provider ?? "openai";
     const modelId: string = aiConfig?.model_id ?? "gpt-4.1";
     const writingStylePrompt: string = writingStyleRes.data?.prompt_text?.trim() ?? "";
+    const linkedinCustomPrompt: string = linkedinTemplateRes.data?.system_prompt?.trim() ?? "";
 
     // Read API key from DB first, fall back to env secret
     async function getApiKey(envName: string): Promise<string | undefined> {
@@ -236,9 +238,11 @@ Deno.serve(async (req) => {
     let parsed: { title: string; intro: string; body: string; closing: string };
 
     try {
-      const baseSystemPrompt = buildSystemPrompt(targetWords);
+      // If admin wrote a custom prompt → it IS the system prompt (replaces hardcoded base).
+      // Writing style appended as supplementary guidelines on top of whichever base is used.
+      const baseSystemPrompt = linkedinCustomPrompt || buildSystemPrompt(targetWords);
       const SYSTEM_PROMPT = writingStylePrompt
-        ? `${baseSystemPrompt}\n\nהנחיות כתיבה נוספות (חובה לשמור עליהן):\n${writingStylePrompt}`
+        ? `${baseSystemPrompt}\n\n---\nהנחיות סגנון כתיבה נוספות (חובה לשמור עליהן):\n${writingStylePrompt}`
         : baseSystemPrompt;
 
       if (provider === "anthropic") {

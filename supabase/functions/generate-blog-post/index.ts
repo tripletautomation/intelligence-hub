@@ -184,15 +184,17 @@ Deno.serve(async (req) => {
       return data?.key_value || Deno.env.get(envName);
     }
 
-    const [articleConfigRes, defaultConfigRes, promptTemplateRes] = await Promise.all([
+    const [articleConfigRes, defaultConfigRes, writingStyleRes, promptTemplateRes] = await Promise.all([
       admin.from("ai_config").select("provider,model_id").eq("id", "article").maybeSingle(),
       admin.from("ai_config").select("provider,model_id").eq("id", "default").maybeSingle(),
+      admin.from("ai_config").select("prompt_text").eq("id", "writing_style").maybeSingle(),
       admin.from("prompt_templates").select("system_prompt").eq("id", `article_${contentType}`).maybeSingle(),
     ]);
 
     const aiConfig = articleConfigRes.data ?? defaultConfigRes.data;
     const provider: string = aiConfig?.provider ?? "openai";
     const modelId: string = aiConfig?.model_id ?? "gpt-4.1";
+    const writingStylePrompt: string = writingStyleRes.data?.prompt_text?.trim() ?? "";
     const customPrompt: string = promptTemplateRes.data?.system_prompt?.trim() ?? "";
 
     let items: ItemRow[] = [];
@@ -227,9 +229,11 @@ Deno.serve(async (req) => {
       items.length > 0 ? `\n--- Source items ---\n${sourceBlock}` : "",
     ].join("\n");
 
-    const baseSystemPrompt = buildSystemPrompt(language);
-    const SYSTEM_PROMPT = customPrompt
-      ? `${baseSystemPrompt}\n\nAdditional guidelines:\n${customPrompt}`
+    // If admin wrote a custom template → it IS the system prompt (replaces hardcoded base).
+    // Writing style appended as supplementary guidelines on top of whichever base is used.
+    const baseSystemPrompt = customPrompt || buildSystemPrompt(language);
+    const SYSTEM_PROMPT = writingStylePrompt
+      ? `${baseSystemPrompt}\n\n---\nAdditional writing style guidelines (must follow):\n${writingStylePrompt}`
       : baseSystemPrompt;
 
     let parsed: { title: string; intro: string; body: string; closing: string };
