@@ -132,20 +132,24 @@ export const ItemCard = ({
           {state.saved ? "שמור" : "שמירה"}
         </Button>
         <Button
-          variant="ghost"
+          variant={state.liked ? "secondary" : "ghost"}
           size="sm"
           onClick={() => onAction("like")}
-          className={cn("gap-1.5", state.liked && "text-accent")}
+          className={cn("gap-1.5", state.liked && "text-accent border-accent/40")}
+          title="רלוונטי — מערכת תלמד"
         >
           <ThumbsUp className="h-3.5 w-3.5" />
+          {state.liked && <span className="text-xs">רלוונטי</span>}
         </Button>
         <Button
-          variant="ghost"
+          variant={state.disliked ? "secondary" : "ghost"}
           size="sm"
           onClick={() => onAction("dislike")}
-          className={cn("gap-1.5", state.disliked && "text-destructive")}
+          className={cn("gap-1.5", state.disliked && "text-destructive border-destructive/40")}
+          title="לא רלוונטי — מערכת תלמד"
         >
           <ThumbsDown className="h-3.5 w-3.5" />
+          {state.disliked && <span className="text-xs">לא רלוונטי</span>}
         </Button>
         {hidden ? (
           onRestore && (

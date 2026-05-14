@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Item, Source, UserItemAction, UserPreferences, ActionType, ItemUserState } from "@/lib/types";
+import type { Item, Source, UserItemAction, UserPreferences, ActionType, ItemUserState, TopicCategory } from "@/lib/types";
 import { useAuth } from "./useAuth";
 
 const DEFAULT_PREFS: Omit<UserPreferences, "user_id"> = {
@@ -11,6 +11,7 @@ const DEFAULT_PREFS: Omit<UserPreferences, "user_id"> = {
   show_unread_first: true,
   prioritize_events: false,
   hide_disliked: true,
+  user_relevance_boost: {},
 };
 
 export const useSources = () =>
@@ -78,17 +79,32 @@ export const useLogAction = () => {
   const qc = useQueryClient();
   const { user } = useAuth();
   return useMutation({
-    mutationFn: async ({ itemId, action }: { itemId: string; action: ActionType }) => {
+    mutationFn: async ({ itemId, action, itemTags }: { itemId: string; action: ActionType; itemTags?: string[] }) => {
       if (!user) throw new Error("not authenticated");
       const { error } = await supabase.from("user_item_actions").insert({ item_id: itemId, action, user_id: user.id });
       if (error) throw error;
-      // Increment view counter when viewing
-      if (action === "view") {
-        await supabase.rpc; // no-op placeholder; counter updates can be added via DB trigger later
+
+      // Update tag-based relevance boost on like/dislike
+      if ((action === "like" || action === "dislike") && itemTags && itemTags.length > 0) {
+        const delta = action === "like" ? 2 : -3;
+        const { data: prefsRow } = await supabase
+          .from("user_preferences")
+          .select("user_relevance_boost")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        const current: Record<string, number> = (prefsRow?.user_relevance_boost as Record<string, number>) ?? {};
+        const next = { ...current };
+        for (const tag of itemTags) {
+          next[tag] = (next[tag] ?? 0) + delta;
+        }
+        await supabase
+          .from("user_preferences")
+          .upsert({ user_id: user.id, user_relevance_boost: next }, { onConflict: "user_id" });
       }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["user_actions"] });
+      qc.invalidateQueries({ queryKey: ["preferences"] });
     },
   });
 };
@@ -122,6 +138,19 @@ export const useSavePreferences = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["preferences"] }),
   });
 };
+
+export const useTopicCategories = () =>
+  useQuery({
+    queryKey: ["topic_categories"],
+    queryFn: async (): Promise<TopicCategory[]> => {
+      const { data, error } = await supabase
+        .from("topic_categories")
+        .select("*")
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as TopicCategory[];
+    },
+  });
 
 /** Hide an item from the user's feed (soft-delete, reversible). */
 export const useHideItem = () => {

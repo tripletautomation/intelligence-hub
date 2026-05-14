@@ -61,6 +61,7 @@ export interface UserPreferences {
   show_unread_first: boolean;
   prioritize_events: boolean;
   hide_disliked: boolean;
+  user_relevance_boost: Record<string, number>;
 }
 
 export interface ItemUserState {
@@ -68,4 +69,11 @@ export interface ItemUserState {
   saved: boolean;
   liked: boolean;
   disliked: boolean;
+}
+
+export interface TopicCategory {
+  id: string;
+  name: string;
+  keywords: string[];
+  sort_order: number;
 }

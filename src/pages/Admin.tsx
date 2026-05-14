@@ -16,9 +16,10 @@ import { SourceManager, type SourceManagerHandle } from "@/components/SourceMana
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, Globe2, Loader2, Rss, FileText, CalendarDays, Key, PenLine, CheckCircle2, Circle } from "lucide-react";
+import { Search, Globe2, Loader2, Rss, FileText, CalendarDays, Key, PenLine, CheckCircle2, Circle, Layers, Plus, Trash2, GripVertical } from "lucide-react";
 import { UserAccessManager } from "@/components/UserAccessManager";
 import { ChevronDown, AlertTriangle, Activity, BrainCircuit, Save } from "lucide-react";
+import type { TopicCategory } from "@/lib/types";
 
 // ─── AI Provider / Model catalogue ───────────────────────────────────────────
 const AI_PROVIDERS = [
@@ -355,6 +356,303 @@ const WritingStyleSection = () => {
   );
 };
 
+// ─── Topic Categories Section ─────────────────────────────────────────────────
+const TopicCategoriesSection = () => {
+  const qc = useQueryClient();
+  const [newName, setNewName] = useState("");
+  const [newKeywords, setNewKeywords] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editKeywords, setEditKeywords] = useState("");
+
+  const { data: categories = [], isLoading } = useQuery<TopicCategory[]>({
+    queryKey: ["topic_categories"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("topic_categories").select("*").order("sort_order", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const addCategory = useMutation({
+    mutationFn: async () => {
+      const name = newName.trim();
+      if (!name) throw new Error("הזן שם קטגוריה");
+      const keywords = newKeywords.split(",").map((k) => k.trim()).filter(Boolean);
+      const maxOrder = categories.length > 0 ? Math.max(...categories.map((c) => c.sort_order)) : 0;
+      const { error } = await (supabase as any)
+        .from("topic_categories")
+        .insert({ name, keywords, sort_order: maxOrder + 1 });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("קטגוריה נוספה");
+      setNewName("");
+      setNewKeywords("");
+      qc.invalidateQueries({ queryKey: ["topic_categories"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const updateCategory = useMutation({
+    mutationFn: async (id: string) => {
+      const name = editName.trim();
+      if (!name) throw new Error("הזן שם קטגוריה");
+      const keywords = editKeywords.split(",").map((k) => k.trim()).filter(Boolean);
+      const { error } = await (supabase as any)
+        .from("topic_categories")
+        .update({ name, keywords, updated_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("קטגוריה עודכנה");
+      setEditingId(null);
+      qc.invalidateQueries({ queryKey: ["topic_categories"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteCategory = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any)
+        .from("topic_categories").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("קטגוריה נמחקה");
+      qc.invalidateQueries({ queryKey: ["topic_categories"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const startEdit = (cat: TopicCategory) => {
+    setEditingId(cat.id);
+    setEditName(cat.name);
+    setEditKeywords(cat.keywords.join(", "));
+  };
+
+  return (
+    <div className="surface-card p-6">
+      <div className="flex items-center gap-2 mb-1">
+        <Layers className="h-5 w-5 text-accent" />
+        <h2 className="text-lg font-bold text-primary">קטגוריות נושא לדשבורד</h2>
+      </div>
+      <p className="text-sm text-muted-foreground mb-4">
+        הגדר נושאים ומילות מפתח — הדשבורד יקבץ ידיעות לפיהם. פריטים שלא מתאימים → "כללי".
+      </p>
+
+      {isLoading ? (
+        <div className="text-sm text-muted-foreground">טוען...</div>
+      ) : (
+        <div className="space-y-2 mb-4">
+          {categories.map((cat) => (
+            <div key={cat.id} className="rounded-lg border border-border p-3">
+              {editingId === cat.id ? (
+                <div className="space-y-2">
+                  <Input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    placeholder="שם קטגוריה"
+                    className="text-sm"
+                    dir="rtl"
+                  />
+                  <Input
+                    value={editKeywords}
+                    onChange={(e) => setEditKeywords(e.target.value)}
+                    placeholder="מילות מפתח מופרדות בפסיק: data center, מרכז נתונים, cloud"
+                    className="text-sm font-mono"
+                    dir="ltr"
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} className="h-7 text-xs">ביטול</Button>
+                    <Button size="sm" onClick={() => updateCategory.mutate(cat.id)} disabled={updateCategory.isPending} className="h-7 text-xs gap-1">
+                      <Save className="h-3 w-3" /> שמור
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-3">
+                  <GripVertical className="h-4 w-4 text-muted-foreground/40 mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-primary">{cat.name}</div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {cat.keywords.map((kw) => (
+                        <span key={kw} className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded font-mono">
+                          {kw}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <Button size="sm" variant="ghost" onClick={() => startEdit(cat)} className="h-7 w-7 p-0">
+                      <PenLine className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => deleteCategory.mutate(cat.id)} className="h-7 w-7 p-0 text-destructive hover:text-destructive">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add new category */}
+      <div className="rounded-lg border border-dashed border-border p-3 space-y-2">
+        <p className="text-xs text-muted-foreground font-medium">הוסף קטגוריה חדשה</p>
+        <Input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder={'שם הקטגוריה (למשל: נדל"ן)'}
+          className="text-sm"
+          dir="rtl"
+        />
+        <Input
+          value={newKeywords}
+          onChange={(e) => setNewKeywords(e.target.value)}
+          placeholder={'מילות מפתח מופרדות בפסיק: real estate, נדל"ן, property'}
+          className="text-sm font-mono"
+          dir="ltr"
+          onKeyDown={(e) => e.key === "Enter" && addCategory.mutate()}
+        />
+        <div className="flex justify-end">
+          <Button size="sm" onClick={() => addCategory.mutate()} disabled={!newName.trim() || addCategory.isPending} className="gap-1.5 h-7 text-xs">
+            <Plus className="h-3 w-3" /> הוסף קטגוריה
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Prompt Templates Section ────────────────────────────────────────────────
+const PROMPT_TEMPLATE_IDS = [
+  { id: "article_linkedin", label: 'מאמר LinkedIn — סגנון מנכ"ל', description: "מאמר 1000-1400 מילים לפרסום ב-LinkedIn ובבלוג, גוף שלישי, ללא סימני AI." },
+  { id: "article_blog_he", label: "מאמר בלוג — עברית", description: "מאמר ארוך 1500-2500 מילים לבלוג החברה, עברית, עם תת-כותרות H2." },
+  { id: "article_blog_en", label: "מאמר בלוג — אנגלית", description: "Long-form blog article 1500-2500 words, English, with H2 subheadings." },
+  { id: "social_linkedin_en", label: "פוסט LinkedIn — אנגלית", description: "פוסט 1300-1800 תווים, אנגלית, hook חזק → תובנה → נקודות → CTA." },
+  { id: "social_linkedin_he", label: "פוסט LinkedIn — עברית", description: "פוסט 1300-1800 תווים, עברית, מבנה זהה לאנגלית." },
+  { id: "image_hero", label: "תמונת Hero (16:9) — בלוג", description: "הנחיה לתמונת כותרת מאמר, יחס 16:9, brand Triple T." },
+  { id: "image_square", label: "תמונת סקוור (1:1) — פוסטים", description: "הנחיה לתמונה ריבועית לפוסטים ברשתות חברתיות." },
+  { id: "image_newsletter", label: "תמונת ניוזלטר (3:1)", description: "הנחיה לתמונת כותרת ניוזלטר, יחס 3:1." },
+  { id: "image_infographic", label: "אינפוגרפיקה (4:5)", description: "הנחיה לתמונה ויזואלית עם נתונים, יחס 4:5." },
+];
+
+const SinglePromptTemplate = ({ id, label, description }: { id: string; label: string; description: string }) => {
+  const qc = useQueryClient();
+  const [text, setText] = useState<string | null>(null);
+
+  const { data: saved, isLoading } = useQuery<{ system_prompt: string }>({
+    queryKey: ["prompt_templates", id],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("prompt_templates").select("system_prompt").eq("id", id).maybeSingle();
+      if (error) throw error;
+      return data ?? { system_prompt: "" };
+    },
+  });
+
+  const activeText = text ?? saved?.system_prompt ?? "";
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const { error } = await (supabase as any)
+        .from("prompt_templates")
+        .upsert({ id, label, system_prompt: activeText, updated_at: new Date().toISOString() });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("פרומפט נשמר");
+      setText(null);
+      qc.invalidateQueries({ queryKey: ["prompt_templates", id] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const isDirty = text !== null && text !== (saved?.system_prompt ?? "");
+
+  if (isLoading) return <div className="text-xs text-muted-foreground">טוען...</div>;
+
+  return (
+    <div className="rounded-lg border border-border p-4 space-y-2">
+      <div>
+        <p className="text-sm font-medium text-primary">{label}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      <Textarea
+        value={activeText}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="השאר ריק לשימוש בפרומפט ברירת המחדל המובנה. הזן הנחיות ספציפיות להוסיף או לדרוס."
+        className="min-h-[100px] text-sm font-mono leading-relaxed resize-y"
+        dir="rtl"
+      />
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] text-muted-foreground/60">
+          {activeText.length === 0 ? "ריק — ישתמש בברירת המחדל המובנה" : `${activeText.length} תווים`}
+        </span>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!isDirty || save.isPending}
+          onClick={() => save.mutate()}
+          className="gap-1.5 h-7 text-xs"
+        >
+          <Save className="h-3 w-3" />
+          {save.isPending ? "שומר..." : "שמור"}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+const PromptTemplatesSection = () => {
+  const [openGroup, setOpenGroup] = useState<string>("articles");
+
+  const groups = [
+    { id: "articles", label: "מאמרים", templates: PROMPT_TEMPLATE_IDS.filter((t) => t.id.startsWith("article")) },
+    { id: "social", label: "פוסטים לרשתות", templates: PROMPT_TEMPLATE_IDS.filter((t) => t.id.startsWith("social")) },
+    { id: "images", label: "תמונות", templates: PROMPT_TEMPLATE_IDS.filter((t) => t.id.startsWith("image")) },
+  ];
+
+  return (
+    <div className="surface-card p-6">
+      <div className="flex items-center gap-2 mb-1">
+        <FileText className="h-5 w-5 text-accent" />
+        <h2 className="text-lg font-bold text-primary">פרומפטים לסוגי תוכן</h2>
+      </div>
+      <p className="text-sm text-muted-foreground mb-4">
+        כתוב הנחיות ייחודיות לכל סוג תוכן. השאר ריק לשימוש בפרומפט הברירת מחדל המובנה.
+      </p>
+      <div className="flex gap-2 mb-4">
+        {groups.map((g) => (
+          <button
+            key={g.id}
+            onClick={() => setOpenGroup(g.id)}
+            className={cn(
+              "px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors",
+              openGroup === g.id
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-card text-muted-foreground border-border hover:text-foreground"
+            )}
+          >
+            {g.label}
+          </button>
+        ))}
+      </div>
+      {groups.filter((g) => g.id === openGroup).map((g) => (
+        <div key={g.id} className="space-y-3">
+          {g.templates.map((t) => (
+            <SinglePromptTemplate key={t.id} {...t} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+};
+
 interface IngestionRun {
   id: string;
   source_id: string | null;
@@ -546,6 +844,8 @@ const Admin = () => {
         <AiConfigSection />
         <ApiKeysSection />
         <WritingStyleSection />
+        <PromptTemplatesSection />
+        <TopicCategoriesSection />
 
         <div className="surface-card p-6">
           <h2 className="text-lg font-bold text-primary mb-1">מצב נתונים</h2>

@@ -4,17 +4,26 @@ import { AppLayout } from "@/components/AppLayout";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDrawer } from "@/components/ItemDrawer";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Sparkles, X, FileText, Loader2 } from "lucide-react";
-import { useItems, useSources, useUserActions, useLogAction, deriveItemStates, usePreferences, useHideItem } from "@/hooks/useIntelligence";
-
+import { RefreshCw, Sparkles, X, FileText, Loader2, LayoutList, Tag } from "lucide-react";
+import {
+  useItems,
+  useSources,
+  useUserActions,
+  useLogAction,
+  deriveItemStates,
+  usePreferences,
+  useHideItem,
+  useTopicCategories,
+} from "@/hooks/useIntelligence";
 import { supabase } from "@/integrations/supabase/client";
 import { formatHeRelative } from "@/lib/format";
 import { toast } from "sonner";
-import type { Item, ActionType } from "@/lib/types";
+import type { Item, ActionType, TopicCategory } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 
 type Filter = "all" | "israel" | "global" | "events" | "research" | "unread" | "saved";
+type GroupMode = "time" | "topic";
 
 const filters: { id: Filter; label: string }[] = [
   { id: "all", label: "הכל" },
@@ -26,6 +35,37 @@ const filters: { id: Filter; label: string }[] = [
   { id: "saved", label: "שמורים" },
 ];
 
+type TimeBucket = "today" | "week" | "month" | "older";
+
+const TIME_BUCKETS: { id: TimeBucket; label: string }[] = [
+  { id: "today", label: "היום" },
+  { id: "week", label: "השבוע" },
+  { id: "month", label: "החודש" },
+  { id: "older", label: "ישן יותר" },
+];
+
+function getTimeBucket(publishedAt: string | null): TimeBucket {
+  if (!publishedAt) return "older";
+  const now = Date.now();
+  const ms = now - new Date(publishedAt).getTime();
+  const hours = ms / 1000 / 3600;
+  if (hours < 24) return "today";
+  if (hours < 24 * 7) return "week";
+  if (hours < 24 * 30) return "month";
+  return "older";
+}
+
+function getTopicBucket(item: Item, categories: TopicCategory[]): string {
+  const itemTags = item.tags_ai.map((t) => t.toLowerCase());
+  for (const cat of categories) {
+    const catKeywords = cat.keywords.map((k) => k.toLowerCase());
+    if (catKeywords.some((kw) => itemTags.some((t) => t.includes(kw) || kw.includes(t)))) {
+      return cat.name;
+    }
+  }
+  return "כללי";
+}
+
 const Dashboard = () => {
   const qc = useQueryClient();
   const nav = useNavigate();
@@ -33,6 +73,7 @@ const Dashboard = () => {
   const { data: sources = [] } = useSources();
   const { data: actions } = useUserActions();
   const { data: prefs } = usePreferences();
+  const { data: topicCategories = [] } = useTopicCategories();
   const hideItem = useHideItem();
 
   const log = useLogAction();
@@ -43,6 +84,16 @@ const Dashboard = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [groupMode, setGroupMode] = useState<GroupMode>("time");
+  const [collapsedBuckets, setCollapsedBuckets] = useState<Set<string>>(new Set(["older"]));
+
+  const toggleBucket = (bucket: string) =>
+    setCollapsedBuckets((prev) => {
+      const next = new Set(prev);
+      if (next.has(bucket)) next.delete(bucket);
+      else next.add(bucket);
+      return next;
+    });
 
   const toggleSelected = (id: string) =>
     setSelectedIds((prev) => {
@@ -115,10 +166,8 @@ const Dashboard = () => {
     const hiddenSet = new Set(prefs?.hidden_item_ids ?? []);
     return items.filter((it) => {
       const st = states.get(it.id) ?? { read: false, saved: false, liked: false, disliked: false };
-      // Hide off-topic / low-relevance items (not related to data centers / computing / tech)
       if ((it.relevance_score ?? 0) < 30) return false;
-      const isHidden = hiddenSet.has(it.id);
-      if (isHidden) return false;
+      if (hiddenSet.has(it.id)) return false;
       if (filter === "israel" && it.region !== "israel") return false;
       if (filter === "global" && it.region !== "global") return false;
       if (filter === "events" && it.item_type !== "event") return false;
@@ -132,7 +181,41 @@ const Dashboard = () => {
       }
       return true;
     });
-  }, [items, states, filter, search, prefs?.hidden_item_ids]);
+  }, [items, states, filter, search, prefs?.hidden_item_ids, showRead]);
+
+  // Sort filtered by effective score (descending) within each bucket
+  const sortedFiltered = useMemo(
+    () => [...filtered].sort((a, b) => (effectiveScore.get(b.id) ?? 0) - (effectiveScore.get(a.id) ?? 0)),
+    [filtered, effectiveScore],
+  );
+
+  // Group by time buckets
+  const byTime = useMemo(() => {
+    const map = new Map<TimeBucket, Item[]>();
+    for (const b of TIME_BUCKETS) map.set(b.id, []);
+    for (const item of sortedFiltered) {
+      const bucket = getTimeBucket(item.published_at);
+      map.get(bucket)!.push(item);
+    }
+    return map;
+  }, [sortedFiltered]);
+
+  // Group by topic
+  const byTopic = useMemo(() => {
+    const map = new Map<string, Item[]>();
+    const orderedNames = [...topicCategories.map((c) => c.name), "כללי"];
+    for (const name of orderedNames) map.set(name, []);
+    for (const item of sortedFiltered) {
+      const bucket = getTopicBucket(item, topicCategories);
+      if (!map.has(bucket)) map.set(bucket, []);
+      map.get(bucket)!.push(item);
+    }
+    // Remove empty buckets
+    for (const [key, val] of map) {
+      if (val.length === 0) map.delete(key);
+    }
+    return map;
+  }, [filtered, topicCategories]);
 
   const kpi = useMemo(() => {
     const today = new Date();
@@ -151,11 +234,46 @@ const Dashboard = () => {
     : { read: false, saved: false, liked: false, disliked: false };
 
   const handleAction = (item: Item, action: ActionType) => {
-    log.mutate({ itemId: item.id, action });
+    log.mutate({ itemId: item.id, action, itemTags: item.tags_ai });
   };
+
+  // Compute effective score per item (relevance + user tag boosts)
+  const effectiveScore = useMemo(() => {
+    const boost = prefs?.user_relevance_boost ?? {};
+    const map = new Map<string, number>();
+    for (const item of items) {
+      const tagBoost = item.tags_ai.reduce((sum, tag) => sum + (boost[tag] ?? 0), 0);
+      map.set(item.id, (item.relevance_score ?? 0) + tagBoost);
+    }
+    return map;
+  }, [items, prefs?.user_relevance_boost]);
+
+  const renderItem = (item: Item) => (
+    <ItemCard
+      key={item.id}
+      item={item}
+      source={item.source_id ? sourcesById.get(item.source_id) : undefined}
+      state={states.get(item.id) ?? { read: false, saved: false, liked: false, disliked: false }}
+      onOpen={() => setOpenItem(item)}
+      onAction={(a) => handleAction(item, a)}
+      selectable={selectMode}
+      selected={selectedIds.has(item.id)}
+      onToggleSelected={() => toggleSelected(item.id)}
+      onHide={() => {
+        hideItem.mutate(
+          { itemId: item.id, hide: true },
+          {
+            onSuccess: () => toast.success("הפריט הועבר לארכיון האישי"),
+            onError: (e: Error) => toast.error(e.message),
+          },
+        );
+      }}
+    />
+  );
 
   return (
     <AppLayout search={search} onSearchChange={setSearch}>
+      {/* Top bar */}
       <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
         <div className="text-xs text-muted-foreground">
           {refreshing ? (
@@ -188,6 +306,7 @@ const Dashboard = () => {
         </div>
       </div>
 
+      {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <KpiCard label="פריטים חדשים היום" value={kpi.newToday} />
         <KpiCard label="לא נקראו" value={kpi.unread} accent />
@@ -195,6 +314,7 @@ const Dashboard = () => {
         <KpiCard label="מקורות פעילים" value={kpi.activeSources} />
       </div>
 
+      {/* Filters + group toggle */}
       <div className="flex flex-wrap gap-2 mb-6 items-center">
         {filters.map((f) => (
           <button
@@ -210,47 +330,94 @@ const Dashboard = () => {
             {f.label}
           </button>
         ))}
-        <button
-          onClick={() => setShowRead((v) => !v)}
-          className={cn(
-            "px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors mr-auto",
-            showRead
-              ? "bg-secondary text-foreground border-border"
-              : "bg-card text-muted-foreground border-border hover:text-foreground"
-          )}
-        >
-          {showRead ? "הסתר נקראים" : "הצג נקראים"}
-        </button>
+        <div className="mr-auto flex items-center gap-2">
+          {/* Group mode toggle */}
+          <div className="flex items-center gap-1 bg-card border border-border rounded-full p-0.5">
+            <button
+              onClick={() => setGroupMode("time")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
+                groupMode === "time"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <LayoutList className="h-3.5 w-3.5" /> לפי זמן
+            </button>
+            <button
+              onClick={() => setGroupMode("topic")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
+                groupMode === "topic"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Tag className="h-3.5 w-3.5" /> לפי נושא
+            </button>
+          </div>
+          <button
+            onClick={() => setShowRead((v) => !v)}
+            className={cn(
+              "px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors",
+              showRead
+                ? "bg-secondary text-foreground border-border"
+                : "bg-card text-muted-foreground border-border hover:text-foreground"
+            )}
+          >
+            {showRead ? "הסתר נקראים" : "הצג נקראים"}
+          </button>
+        </div>
       </div>
 
-      <div className="space-y-4">
-        {filtered.length === 0 ? (
-          <div className="surface-card p-12 text-center text-muted-foreground">אין פריטים תואמים לסינון</div>
-        ) : (
-          filtered.map((item) => (
-            <ItemCard
-              key={item.id}
-              item={item}
-              source={item.source_id ? sourcesById.get(item.source_id) : undefined}
-              state={states.get(item.id) ?? { read: false, saved: false, liked: false, disliked: false }}
-              onOpen={() => setOpenItem(item)}
-              onAction={(a) => handleAction(item, a)}
-              selectable={selectMode}
-              selected={selectedIds.has(item.id)}
-              onToggleSelected={() => toggleSelected(item.id)}
-              onHide={() => {
-                hideItem.mutate(
-                  { itemId: item.id, hide: true },
-                  {
-                    onSuccess: () => toast.success("הפריט הועבר לארכיון האישי"),
-                    onError: (e: Error) => toast.error(e.message),
-                  },
-                );
-              }}
-            />
-          ))
-        )}
-      </div>
+      {/* Content */}
+      {filtered.length === 0 ? (
+        <div className="surface-card p-12 text-center text-muted-foreground">אין פריטים תואמים לסינון</div>
+      ) : groupMode === "time" ? (
+        <div className="space-y-6">
+          {TIME_BUCKETS.map(({ id, label }) => {
+            const bucketItems = byTime.get(id) ?? [];
+            if (bucketItems.length === 0) return null;
+            const isCollapsed = collapsedBuckets.has(id);
+            return (
+              <BucketSection
+                key={id}
+                label={label}
+                count={bucketItems.length}
+                collapsed={isCollapsed}
+                onToggle={() => toggleBucket(id)}
+              >
+                {!isCollapsed && (
+                  <div className="space-y-3 mt-3">
+                    {bucketItems.map(renderItem)}
+                  </div>
+                )}
+              </BucketSection>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {Array.from(byTopic.entries()).map(([name, topicItems]) => {
+            const isCollapsed = collapsedBuckets.has(name);
+            return (
+              <BucketSection
+                key={name}
+                label={name}
+                count={topicItems.length}
+                collapsed={isCollapsed}
+                onToggle={() => toggleBucket(name)}
+              >
+                {!isCollapsed && (
+                  <div className="space-y-3 mt-3">
+                    {topicItems.map(renderItem)}
+                  </div>
+                )}
+              </BucketSection>
+            );
+          })}
+        </div>
+      )}
 
       <ItemDrawer
         item={openItem}
@@ -292,6 +459,35 @@ const KpiCard = ({ label, value, accent }: { label: string; value: number; accen
   <div className="surface-card p-5">
     <div className="text-xs text-muted-foreground mb-2">{label}</div>
     <div className={cn("text-3xl font-bold", accent ? "text-accent" : "text-primary")}>{value}</div>
+  </div>
+);
+
+const BucketSection = ({
+  label,
+  count,
+  collapsed,
+  onToggle,
+  children,
+}: {
+  label: string;
+  count: number;
+  collapsed: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) => (
+  <div>
+    <button
+      onClick={onToggle}
+      className="flex items-center gap-2 w-full text-right group mb-1"
+    >
+      <span className="text-sm font-semibold text-foreground">{label}</span>
+      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{count}</span>
+      <span className="text-xs text-muted-foreground mr-auto group-hover:text-foreground transition-colors">
+        {collapsed ? "הצג ▼" : "כווץ ▲"}
+      </span>
+    </button>
+    <div className="border-b border-border mb-3" />
+    {children}
   </div>
 );
 

@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { buildMailtoUrl } from "@/lib/mailto";
 
 type DraftStatus = "draft" | "approved" | "archived";
+type ContentType = "linkedin" | "blog_he" | "blog_en";
 
 interface DraftRow {
   id: string;
@@ -28,7 +29,20 @@ interface DraftRow {
   source_item_ids: string[];
   created_at: string;
   status: DraftStatus;
+  content_type: ContentType;
 }
+
+const CONTENT_TYPE_LABEL: Record<ContentType, string> = {
+  linkedin: "LinkedIn",
+  blog_he: "בלוג עברית",
+  blog_en: "בלוג English",
+};
+
+const CONTENT_TYPE_COLOR: Record<ContentType, string> = {
+  linkedin: "bg-blue-500/10 text-blue-700 border-blue-300/40 dark:text-blue-400",
+  blog_he: "bg-purple-500/10 text-purple-700 border-purple-300/40 dark:text-purple-400",
+  blog_en: "bg-indigo-500/10 text-indigo-700 border-indigo-300/40 dark:text-indigo-400",
+};
 
 const tabs: { id: DraftStatus; label: string; emptyHint: string }[] = [
   { id: "draft", label: "טיוטות", emptyHint: "עדיין לא יצרת טיוטות. בעמוד הראשי בחר פריטים ולחץ \"צור מאמר מהנבחרים\"." },
@@ -53,6 +67,7 @@ const Drafts = () => {
   const nav = useNavigate();
   const qc = useQueryClient();
   const [tab, setTab] = useState<DraftStatus>("draft");
+  const [contentFilter, setContentFilter] = useState<ContentType | "all">("all");
 
   const { data: rows = [], isLoading } = useQuery({
     enabled: !!user,
@@ -60,7 +75,7 @@ const Drafts = () => {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("article_drafts")
-        .select("id,title,intro,source_item_ids,created_at,status")
+        .select("id,title,intro,source_item_ids,created_at,status,content_type")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as DraftRow[];
@@ -74,7 +89,10 @@ const Drafts = () => {
   }, [rows]);
 
   const filtered = useMemo(
-    () => rows.filter((r) => r.status === tab).map((r) => ({
+    () => rows
+      .filter((r) => r.status === tab)
+      .filter((r) => contentFilter === "all" || (r.content_type ?? "linkedin") === contentFilter)
+      .map((r) => ({
       ...r,
       created_label: new Date(r.created_at).toLocaleString("he-IL", {
         day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
@@ -148,6 +166,24 @@ const Drafts = () => {
         ))}
       </div>
 
+      {/* Content type filter */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        {([["all", "הכל"], ["linkedin", "LinkedIn"], ["blog_he", 'בלוג עברית'], ["blog_en", "בלוג English"]] as [string, string][]).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setContentFilter(id as ContentType | "all")}
+            className={cn(
+              "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+              contentFilter === id
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-card text-muted-foreground border-border hover:text-foreground"
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {isLoading ? (
         <div className="flex justify-center py-16 text-muted-foreground">
           <Loader2 className="h-6 w-6 animate-spin" />
@@ -171,12 +207,20 @@ const Drafts = () => {
                     <FileText className="h-3.5 w-3.5" />
                     {d.created_label}
                   </div>
-                  <span className={cn(
-                    "text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border font-semibold",
-                    statusBadge[d.status],
-                  )}>
-                    {statusLabel[d.status]}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={cn(
+                      "text-[10px] px-2 py-0.5 rounded-full border font-medium",
+                      CONTENT_TYPE_COLOR[(d.content_type ?? "linkedin") as ContentType],
+                    )}>
+                      {CONTENT_TYPE_LABEL[(d.content_type ?? "linkedin") as ContentType]}
+                    </span>
+                    <span className={cn(
+                      "text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border font-semibold",
+                      statusBadge[d.status],
+                    )}>
+                      {statusLabel[d.status]}
+                    </span>
+                  </div>
                 </div>
 
                 <Link to={`/drafts/${d.id}`} className="group">

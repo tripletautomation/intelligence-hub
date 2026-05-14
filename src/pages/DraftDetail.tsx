@@ -52,7 +52,8 @@ interface SocialPosts { linkedin_en: string; linkedin_he: string; image_prompt: 
 type Section = "intro" | "body" | "closing";
 type AiAction = "regenerate" | "expand" | "condense" | "rephrase";
 type Tone = "formal" | "analytical" | "concise";
-type MainTab = "editor" | "social";
+type MainTab = "editor" | "social" | "images";
+type ImageType = "hero" | "square" | "newsletter" | "infographic";
 type Platform = "linkedin_en" | "linkedin_he" | "image_prompt";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -115,6 +116,11 @@ const DraftDetail = () => {
   const [socialAiInstruction, setSocialAiInstruction] = useState("");
   const [socialAiLoading, setSocialAiLoading] = useState(false);
 
+  // Image prompts
+  const [imagePrompts, setImagePrompts] = useState<Partial<Record<ImageType, string>>>({});
+  const [imageLoading, setImageLoading] = useState(false);
+  const [copiedImage, setCopiedImage] = useState<ImageType | null>(null);
+
 
   // ── Queries ──────────────────────────────────────────────────────────────────
 
@@ -161,6 +167,26 @@ const DraftDetail = () => {
       }
     }
   }, [savedPosts]);
+
+  // Load saved image prompts
+  const { data: savedImages } = useQuery({
+    enabled: !!user && !!id,
+    queryKey: ["content_images", id],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("content_images").select("image_type,prompt").eq("draft_id", id);
+      if (error) throw error;
+      return data as { image_type: ImageType; prompt: string }[];
+    },
+  });
+
+  useEffect(() => {
+    if (savedImages?.length) {
+      const imgs: Partial<Record<ImageType, string>> = {};
+      savedImages.forEach((img) => { imgs[img.image_type] = img.prompt; });
+      setImagePrompts(imgs);
+    }
+  }, [savedImages]);
 
   // ── Form state ───────────────────────────────────────────────────────────────
 
@@ -304,6 +330,38 @@ const DraftDetail = () => {
     } finally { setSocialLoading(false); }
   };
 
+  const generateImagePromptsAll = async () => {
+    setImageLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-image-prompts", {
+        body: { draft_id: id, types: ["hero", "square", "newsletter", "infographic"] },
+      });
+      if (error) throw new Error(error.message);
+      const prompts = (data as any)?.prompts as Partial<Record<ImageType, string>>;
+      if (!prompts) throw new Error("AI לא החזיר הנחיות");
+      setImagePrompts(prompts);
+      qc.invalidateQueries({ queryKey: ["content_images", id] });
+      toast.success("הנחיות תמונות נוצרו");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה ביצירת הנחיות");
+    } finally { setImageLoading(false); }
+  };
+
+  const copyImagePrompt = async (type: ImageType) => {
+    const text = imagePrompts[type] ?? "";
+    await navigator.clipboard.writeText(text).catch(() => toast.error("לא ניתן להעתיק"));
+    setCopiedImage(type);
+    setTimeout(() => setCopiedImage(null), 1500);
+  };
+
+  const updateImagePrompt = async (type: ImageType, value: string) => {
+    setImagePrompts((p) => ({ ...p, [type]: value }));
+    await (supabase as any).from("content_images").upsert(
+      { draft_id: id, user_id: user?.id, image_type: type, prompt: value, updated_at: new Date().toISOString() },
+      { onConflict: "draft_id,image_type" }
+    );
+  };
+
   const copyPlatform = async (platform: Platform) => {
     const text = socialPosts?.[platform] ?? "";
     await navigator.clipboard.writeText(text).catch(() => toast.error("לא ניתן להעתיק"));
@@ -417,14 +475,19 @@ const DraftDetail = () => {
 
       {/* Main Tabs */}
       <div className="flex gap-1 mb-5 bg-muted/40 rounded-lg p-1 w-fit">
-        {([{ id: "editor", label: "עריכה" }, { id: "social", label: "פוסטים לרשתות" }] as const).map((t) => (
+        {([
+          { id: "editor", label: "עריכה", icon: null },
+          { id: "social", label: "פוסטים לרשתות", icon: <Share2 className="h-3.5 w-3.5" /> },
+          { id: "images", label: "תמונות", icon: <Image className="h-3.5 w-3.5" /> },
+        ] as const).map((t) => (
           <button key={t.id} type="button" onClick={() => setMainTab(t.id)}
             className={cn("px-4 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5",
               mainTab === t.id ? "bg-background shadow-sm text-primary" : "text-muted-foreground hover:text-foreground"
             )}>
-            {t.id === "social" && <Share2 className="h-3.5 w-3.5" />}
+            {t.icon}
             {t.label}
             {t.id === "social" && socialPosts && <span className="text-[10px] bg-accent/20 text-accent rounded-full px-1.5">✓</span>}
+            {t.id === "images" && Object.keys(imagePrompts).length > 0 && <span className="text-[10px] bg-accent/20 text-accent rounded-full px-1.5">{Object.keys(imagePrompts).length}</span>}
           </button>
         ))}
       </div>
@@ -727,6 +790,70 @@ const DraftDetail = () => {
               })}
             </div>
           )}
+        </div>
+      )}
+      {/* ── IMAGES TAB ────────────────────────────────────────────────────────── */}
+      {mainTab === "images" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-primary">הנחיות תמונות</h2>
+              <p className="text-sm text-muted-foreground">
+                העתק הנחיה לאחד ממחוללי התמונות (DALL-E 3, Gemini Imagen, Midjourney).
+              </p>
+            </div>
+            <Button onClick={generateImagePromptsAll} disabled={imageLoading} className="gap-1.5">
+              {imageLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {imageLoading ? "מייצר..." : Object.keys(imagePrompts).length > 0 ? "עדכן הכל" : "צור הכל"}
+            </Button>
+          </div>
+
+          {([
+            { type: "hero" as ImageType, label: "Hero — כותרת בלוג/מאמר", ratio: "16:9", hint: "לתמונת כותרת רחבה של מאמר" },
+            { type: "square" as ImageType, label: "סקוור — LinkedIn / פוסטים", ratio: "1:1", hint: "לפוסטים ברשתות חברתיות" },
+            { type: "newsletter" as ImageType, label: "ניוזלטר — כותרת", ratio: "3:1", hint: "לבאנר כותרת ניוזלטר" },
+            { type: "infographic" as ImageType, label: "אינפוגרפיקה — נתונים", ratio: "4:5", hint: "לתמונה ויזואלית עם נתונים" },
+          ]).map(({ type, label, ratio, hint }) => {
+            const prompt = imagePrompts[type] ?? "";
+            const isCopied = copiedImage === type;
+            return (
+              <Card key={type} className="p-5 space-y-3 border-border">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Image className="h-4 w-4 text-accent" />
+                      <span className="text-sm font-semibold text-primary">{label}</span>
+                      <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{ratio}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">{hint}</p>
+                  </div>
+                  {prompt && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => copyImagePrompt(type)}
+                      className="gap-1.5 shrink-0 h-8"
+                    >
+                      {isCopied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                      {isCopied ? "הועתק!" : "העתק"}
+                    </Button>
+                  )}
+                </div>
+                <AutoResizeTextarea
+                  value={prompt}
+                  onChange={(e) => updateImagePrompt(type, e.target.value)}
+                  placeholder={imageLoading ? "מייצר הנחיה..." : "לחץ 'צור הכל' לייצור הנחיות, או הזן ידנית."}
+                  className="text-sm font-mono leading-relaxed min-h-[80px] resize-y"
+                  dir="ltr"
+                />
+                {prompt && (
+                  <p className="text-[10px] text-muted-foreground">
+                    {prompt.split(" ").length} מילים · הכנס ל-DALL-E 3: 1792×1024 ({ratio})
+                  </p>
+                )}
+              </Card>
+            );
+          })}
         </div>
       )}
     </AppLayout>
