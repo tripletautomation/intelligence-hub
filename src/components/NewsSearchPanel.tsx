@@ -3,8 +3,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Loader2, Plus, CheckCircle2, ExternalLink, Clock } from "lucide-react";
+import { Search, Loader2, Plus, CheckCircle2, ExternalLink, Clock, CheckSquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -59,11 +60,42 @@ export const NewsSearchPanel = ({ open, onOpenChange }: Props) => {
   const [addedUrls, setAddedUrls] = useState<Set<string>>(new Set());
   const [searching, setSearching] = useState(false);
   const [addingUrl, setAddingUrl] = useState<string | null>(null);
+  const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set());
+  const [addingBulk, setAddingBulk] = useState(false);
+
+  const toggleSelectUrl = (url: string) =>
+    setSelectedUrls((prev) => { const next = new Set(prev); next.has(url) ? next.delete(url) : next.add(url); return next; });
+
+  const toggleSelectAll = () =>
+    setSelectedUrls(selectedUrls.size === results.filter(r => !addedUrls.has(r.url)).length
+      ? new Set()
+      : new Set(results.filter(r => !addedUrls.has(r.url)).map(r => r.url)));
+
+  const addBulkToFeed = async () => {
+    const toAdd = results.filter(r => selectedUrls.has(r.url) && !addedUrls.has(r.url));
+    if (!toAdd.length) return;
+    setAddingBulk(true);
+    let added = 0;
+    for (const item of toAdd) {
+      try {
+        const { data, error } = await supabase.functions.invoke("add-news-to-feed", { body: { item } });
+        if (!error && !(data as any)?.error) {
+          setAddedUrls((prev) => new Set([...prev, item.url]));
+          added++;
+        }
+      } catch { /* skip */ }
+    }
+    qc.invalidateQueries({ queryKey: ["items"] });
+    setSelectedUrls(new Set());
+    setAddingBulk(false);
+    toast.success(`נוספו ${added} ידיעות לדשבורד`);
+  };
 
   const handleSearch = async () => {
     if (!query.trim()) return;
     setSearching(true);
     setResults([]);
+    setSelectedUrls(new Set());
     try {
       const { data, error } = await supabase.functions.invoke("discover-news", {
         body: { query: query.trim(), region, days: Number(days) },
@@ -188,15 +220,35 @@ export const NewsSearchPanel = ({ open, onOpenChange }: Props) => {
 
           {!searching && results.length > 0 && (
             <>
-              <p className="text-xs text-muted-foreground pb-1">
-                נמצאו {results.length} ידיעות · לחץ <span className="font-medium text-foreground">הוסף לדשבורד</span> כדי לשתף עם כל המשתמשים
-              </p>
+              <div className="flex items-center gap-2 pb-2 flex-wrap">
+                <p className="text-xs text-muted-foreground flex-1">
+                  נמצאו {results.length} ידיעות
+                </p>
+                <Button size="sm" variant="outline" onClick={toggleSelectAll} className="h-7 gap-1.5 text-xs">
+                  <CheckSquare className="h-3.5 w-3.5" />
+                  {selectedUrls.size === results.filter(r => !addedUrls.has(r.url)).length && selectedUrls.size > 0
+                    ? "בטל הכל" : "בחר הכל"}
+                </Button>
+                {selectedUrls.size > 0 && (
+                  <Button
+                    size="sm"
+                    onClick={addBulkToFeed}
+                    disabled={addingBulk}
+                    className="h-7 gap-1.5 text-xs"
+                  >
+                    {addingBulk ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                    הוסף נבחרים ({selectedUrls.size})
+                  </Button>
+                )}
+              </div>
               {results.map((item) => (
                 <NewsResultCard
                   key={item.url}
                   item={item}
                   added={addedUrls.has(item.url)}
                   isAdding={addingUrl === item.url}
+                  selected={selectedUrls.has(item.url)}
+                  onToggleSelect={() => toggleSelectUrl(item.url)}
                   onAdd={() => addToFeed(item)}
                 />
               ))}
@@ -212,11 +264,15 @@ const NewsResultCard = ({
   item,
   added,
   isAdding,
+  selected,
+  onToggleSelect,
   onAdd,
 }: {
   item: DiscoveredNewsItem;
   added: boolean;
   isAdding: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
   onAdd: () => void;
 }) => {
   const dateLabel = formatPublishedDate(item.published_date);
@@ -224,9 +280,16 @@ const NewsResultCard = ({
   return (
     <div className={cn(
       "rounded-xl border p-4 space-y-2.5 transition-colors",
-      added ? "border-accent/30 bg-accent/5" : "border-border bg-card hover:border-accent/20"
+      added ? "border-accent/30 bg-accent/5" : selected ? "border-accent bg-accent/5" : "border-border bg-card hover:border-accent/20"
     )}>
       <div className="flex items-start justify-between gap-3">
+        {!added && (
+          <Checkbox
+            checked={selected}
+            onCheckedChange={onToggleSelect}
+            className="mt-0.5 shrink-0"
+          />
+        )}
         <h3 className="text-sm font-semibold text-primary leading-snug flex-1">{item.title_he}</h3>
         <span className={cn(
           "shrink-0 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border font-medium",

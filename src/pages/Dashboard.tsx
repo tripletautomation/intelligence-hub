@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDrawer } from "@/components/ItemDrawer";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Search, LayoutList, Tag, ChevronDown, ChevronUp, Zap, Calendar, Clock, Archive } from "lucide-react";
+import { RefreshCw, Search, LayoutList, Tag, ChevronDown, ChevronUp, Zap, Calendar, Clock, Archive, CheckSquare, X, Loader2 } from "lucide-react";
 import { NewsSearchPanel } from "@/components/NewsSearchPanel";
+import { supabase } from "@/integrations/supabase/client";
 import {
   useItems,
   useSources,
@@ -16,13 +18,12 @@ import {
   useHideItem,
   useTopicCategories,
 } from "@/hooks/useIntelligence";
-import { supabase } from "@/integrations/supabase/client";
 import { formatHeRelative } from "@/lib/format";
 import { toast } from "sonner";
 import type { Item, ActionType, TopicCategory } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Filter = "all" | "israel" | "global" | "events" | "research" | "unread" | "saved";
+type Filter = "all" | "israel" | "global" | "events" | "research" | "unread" | "saved" | "liked" | "disliked";
 type GroupMode = "time" | "topic";
 
 const filters: { id: Filter; label: string }[] = [
@@ -33,6 +34,8 @@ const filters: { id: Filter; label: string }[] = [
   { id: "research", label: "מחקר" },
   { id: "unread", label: "לא נקראו" },
   { id: "saved", label: "שמורים" },
+  { id: "liked", label: "❤️ אהבתי" },
+  { id: "disliked", label: "👎 לא רלוונטי" },
 ];
 
 type TimeBucket = "today" | "week" | "month" | "older";
@@ -66,8 +69,11 @@ function getTopicBucket(item: Item, categories: TopicCategory[]): string {
   return "כללי";
 }
 
+type GenerateType = "linkedin" | "blog_he" | "blog_en";
+
 const Dashboard = () => {
   const qc = useQueryClient();
+  const nav = useNavigate();
   const { data: items = [], dataUpdatedAt, refetch: refetchItems } = useItems();
   const { data: sources = [] } = useSources();
   const { data: actions } = useUserActions();
@@ -84,6 +90,9 @@ const Dashboard = () => {
   const [newsSearchOpen, setNewsSearchOpen] = useState(false);
   const [groupMode, setGroupMode] = useState<GroupMode>("time");
   const [collapsedBuckets, setCollapsedBuckets] = useState<Set<string>>(new Set(["older"]));
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [generating, setGenerating] = useState<GenerateType | null>(null);
 
   const toggleBucket = (bucket: string) =>
     setCollapsedBuckets((prev) => {
@@ -140,17 +149,20 @@ const Dashboard = () => {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const hiddenSet = new Set(prefs?.hidden_item_ids ?? []);
+    const showHidden = filter === "liked" || filter === "disliked";
     return items.filter((it) => {
       const st = states.get(it.id) ?? { read: false, saved: false, liked: false, disliked: false };
       if ((it.relevance_score ?? 0) < 30) return false;
-      if (hiddenSet.has(it.id)) return false;
+      if (!showHidden && hiddenSet.has(it.id)) return false;
       if (filter === "israel" && it.region !== "israel") return false;
       if (filter === "global" && it.region !== "global") return false;
       if (filter === "events" && it.item_type !== "event") return false;
       if (filter === "research" && it.item_type !== "research") return false;
-      if (!showRead && filter !== "unread" && st.read) return false;
+      if (!showRead && filter !== "unread" && filter !== "liked" && filter !== "disliked" && st.read) return false;
       if (filter === "unread" && st.read) return false;
       if (filter === "saved" && !st.saved) return false;
+      if (filter === "liked" && !st.liked) return false;
+      if (filter === "disliked" && !st.disliked) return false;
       if (q) {
         const hay = `${it.title_he} ${it.summary_he ?? ""} ${it.tags_ai.join(" ")}`.toLowerCase();
         if (!hay.includes(q)) return false;
@@ -211,8 +223,44 @@ const Dashboard = () => {
 
   const handleAction = (item: Item, action: ActionType) => {
     log.mutate({ itemId: item.id, action, itemTags: item.tags_ai });
-    if (action === "like" || action === "dislike" || action === "save") {
+    if (action === "dislike" || action === "save") {
       hideItem.mutate({ itemId: item.id, hide: true });
+    }
+  };
+
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  const handleGenerate = async (type: GenerateType) => {
+    if (selectedIds.size === 0) return;
+    setGenerating(type);
+    try {
+      const ids = [...selectedIds];
+      let draftId: string;
+      if (type === "linkedin") {
+        const { data, error } = await supabase.functions.invoke("generate-article", { body: { item_ids: ids } });
+        if (error) throw error;
+        if ((data as any)?.error) throw new Error((data as any).error);
+        draftId = (data as any).draft_id;
+      } else {
+        const language = type === "blog_en" ? "en" : "he";
+        const { data, error } = await supabase.functions.invoke("generate-blog-post", { body: { item_ids: ids, language } });
+        if (error) throw error;
+        if ((data as any)?.error) throw new Error((data as any).error);
+        draftId = (data as any).draft_id;
+      }
+      setSelectMode(false);
+      setSelectedIds(new Set());
+      toast.success("הטיוטה נוצרה בהצלחה");
+      nav(`/drafts/${draftId}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה ביצירת מאמר");
+    } finally {
+      setGenerating(null);
     }
   };
 
@@ -222,9 +270,12 @@ const Dashboard = () => {
       item={item}
       source={item.source_id ? sourcesById.get(item.source_id) : undefined}
       state={states.get(item.id) ?? { read: false, saved: false, liked: false, disliked: false }}
-      onOpen={() => setOpenItem(item)}
+      onOpen={() => !selectMode && setOpenItem(item)}
       onAction={(a) => handleAction(item, a)}
       compact
+      selectable={selectMode}
+      selected={selectedIds.has(item.id)}
+      onToggleSelected={() => toggleSelect(item.id)}
       onHide={() => {
         hideItem.mutate(
           { itemId: item.id, hide: true },
@@ -253,6 +304,15 @@ const Dashboard = () => {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant={selectMode ? "secondary" : "outline"}
+            onClick={() => { setSelectMode((v) => !v); setSelectedIds(new Set()); }}
+            className="gap-2"
+          >
+            <CheckSquare className="h-4 w-4" />
+            {selectMode ? "בטל בחירה" : "בחר פריטים"}
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -386,6 +446,50 @@ const Dashboard = () => {
       />
 
       <NewsSearchPanel open={newsSearchOpen} onOpenChange={setNewsSearchOpen} />
+
+      {/* Multi-select action bar */}
+      {selectMode && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-sm px-4 py-3">
+          <div className="max-w-5xl mx-auto flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-medium text-foreground">
+              {selectedIds.size > 0 ? `${selectedIds.size} פריטים נבחרו` : "בחר פריטים לעיבוד"}
+            </span>
+            <Button
+              size="sm" variant="ghost"
+              onClick={() => { const all = new Set(sortedFiltered.map(i => i.id)); setSelectedIds(all); }}
+              className="text-xs gap-1"
+            >
+              <CheckSquare className="h-3.5 w-3.5" /> בחר הכל
+            </Button>
+            <div className="w-px h-5 bg-border hidden sm:block" />
+            <div className="flex items-center gap-2 flex-wrap">
+              {([
+                { type: "linkedin" as GenerateType, label: "מאמר LinkedIn" },
+                { type: "blog_he" as GenerateType, label: "בלוג עברית" },
+                { type: "blog_en" as GenerateType, label: "Blog English" },
+              ]).map(({ type, label }) => (
+                <Button
+                  key={type}
+                  size="sm"
+                  disabled={selectedIds.size === 0 || !!generating}
+                  onClick={() => handleGenerate(type)}
+                  className="gap-1.5"
+                >
+                  {generating === type ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <Button
+              size="sm" variant="ghost"
+              onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }}
+              className="mr-auto text-muted-foreground"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 };
