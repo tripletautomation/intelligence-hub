@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   FileText, Sparkles, Loader2, Mail, Trash2, Pencil,
-  CheckCircle2, Archive as ArchiveIcon, RotateCcw,
+  CheckCircle2, Archive as ArchiveIcon, RotateCcw, User,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ interface DraftRow {
   created_at: string;
   status: DraftStatus;
   content_type: ContentType;
+  profiles: { first_name: string | null } | null;
 }
 
 const CONTENT_TYPE_LABEL: Record<ContentType, string> = {
@@ -71,11 +72,11 @@ const Drafts = () => {
 
   const { data: rows = [], isLoading } = useQuery({
     enabled: !!user,
-    queryKey: ["article_drafts", user?.id],
+    queryKey: ["article_drafts"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("article_drafts")
-        .select("id,title,intro,source_item_ids,created_at,status,content_type")
+        .select("id,title,intro,source_item_ids,created_at,status,content_type,profiles(first_name)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as DraftRow[];
@@ -137,9 +138,9 @@ const Drafts = () => {
         <div className="flex items-center gap-2 text-accent text-xs font-semibold uppercase tracking-widest mb-2">
           <Sparkles className="h-3.5 w-3.5" /> מאמרים שיצרת
         </div>
-        <h1 className="text-2xl font-bold text-primary mb-1">המאמרים שלי</h1>
+        <h1 className="text-2xl font-bold text-primary mb-1">מאמרים משותפים</h1>
         <p className="text-sm text-muted-foreground">
-          ניהול ועריכה של מאמרים שנוצרו מבחירה של פריטים בעמוד הראשי. אשר מאמרים מוכנים, או העבר לארכיון מה שכבר לא רלוונטי.
+          כל המאמרים שנוצרו על ידי כל חברי הצוות. ניתן לערוך, לאשר ולשתף כל מאמר.
         </p>
       </div>
 
@@ -203,9 +204,17 @@ const Drafts = () => {
             return (
               <Card key={d.id} className="p-5 flex flex-col gap-3 border-border hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
-                    <FileText className="h-3.5 w-3.5" />
-                    {d.created_label}
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
+                    <span className="flex items-center gap-1 uppercase tracking-wider">
+                      <FileText className="h-3.5 w-3.5" />
+                      {d.created_label}
+                    </span>
+                    {d.profiles?.first_name && (
+                      <span className="flex items-center gap-1 bg-secondary px-1.5 py-0.5 rounded">
+                        <User className="h-3 w-3" />
+                        {d.profiles.first_name}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className={cn(
