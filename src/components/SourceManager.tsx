@@ -170,7 +170,11 @@ export const SourceManager = forwardRef<SourceManagerHandle, { onRunSource: (sou
         toast.success(`RSS תקין (${v.item_count ?? 0} פריטים נמצאו)`);
         return { valid: true, status: "valid" };
       }
-      toast.error(`RSS לא תקין: ${v?.reason ?? "unknown"}`);
+      if (v?.reason === "not_a_feed") {
+        toast.error("ה-URL הגיב אך אינו RSS feed תקין");
+      } else {
+        toast.warning("לא ניתן לאמת RSS (האתר חסם בדיקה) — המקור יישמר כממתין");
+      }
       return { valid: false, reason: v?.reason, status: "invalid" };
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "שגיאת ולידציה");
@@ -193,9 +197,17 @@ export const SourceManager = forwardRef<SourceManagerHandle, { onRunSource: (sou
       let nextStatus: SourceStatus = editing?.status ?? "pending";
       if (parsed.data.rss_url) {
         const v = await validateRss();
-        nextStatus = v.status ?? "pending";
+        if (v.valid) {
+          nextStatus = "valid";
+        } else if (v.reason === "not_a_feed") {
+          // URL responded but isn't a feed at all
+          nextStatus = "invalid";
+        } else {
+          // http_error / fetch_failed / timeout — site blocked our check, save as pending
+          nextStatus = "pending";
+        }
       } else {
-        nextStatus = "pending"; // non-RSS sources stay pending (not runnable in Phase 1)
+        nextStatus = "pending";
       }
 
       const payload: any = {
@@ -463,7 +475,7 @@ const SourceRowCard = ({
   onRun: () => void;
 }) => {
   const archived = s.status === "archived";
-  const runnable = !archived && s.active && !!s.rss_url && s.status === "valid";
+  const runnable = !archived && s.active && !!s.rss_url && (s.status === "valid" || s.status === "pending");
   const displayName = s.display_name || s.name;
   const isRunning = runningId === s.id;
 
