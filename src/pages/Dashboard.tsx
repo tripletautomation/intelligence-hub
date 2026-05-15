@@ -211,6 +211,9 @@ const Dashboard = () => {
 
   const handleAction = (item: Item, action: ActionType) => {
     log.mutate({ itemId: item.id, action, itemTags: item.tags_ai });
+    if (action === "like" || action === "dislike" || action === "save") {
+      hideItem.mutate({ itemId: item.id, hide: true });
+    }
   };
 
   const renderItem = (item: Item) => (

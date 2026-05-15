@@ -1,7 +1,7 @@
 import type { Item, Source, ItemUserState } from "@/lib/types";
 import { RegionBadge } from "./RegionBadge";
 import { formatHeRelative } from "@/lib/format";
-import { Bookmark, BookmarkCheck, ExternalLink, ThumbsDown, ThumbsUp, Check, Calendar, Mail, Trash2, RotateCcw } from "lucide-react";
+import { Bookmark, BookmarkCheck, ExternalLink, ThumbsDown, ThumbsUp, Check, Calendar, Mail, Trash2, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -53,6 +53,15 @@ export const ItemCard = ({
           <RegionBadge region={item.region} />
           {source && <span className="font-medium text-foreground/60">{source.name}</span>}
           <span className="mr-auto">{formatHeRelative(item.published_at)}</span>
+          {onHide && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onHide(); }}
+              className="p-0.5 rounded hover:bg-muted hover:text-destructive transition-colors"
+              title="הסר מהפיד"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Title — 2 lines max */}
