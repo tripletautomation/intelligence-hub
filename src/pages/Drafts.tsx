@@ -30,7 +30,7 @@ interface DraftRow {
   created_at: string;
   status: DraftStatus;
   content_type: ContentType;
-  profiles: { first_name: string | null } | null;
+  user_id: string | null;
 }
 
 const CONTENT_TYPE_LABEL: Record<ContentType, string> = {
@@ -76,10 +76,24 @@ const Drafts = () => {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("article_drafts")
-        .select("id,title,intro,source_item_ids,created_at,status,content_type,profiles(first_name)")
+        .select("id,title,intro,source_item_ids,created_at,status,content_type,user_id")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as DraftRow[];
+    },
+  });
+
+  const { data: profilesMap = {} } = useQuery({
+    enabled: rows.length > 0,
+    queryKey: ["profiles", rows.map((r) => r.user_id).filter(Boolean).join(",")],
+    queryFn: async () => {
+      const userIds = [...new Set(rows.map((r) => r.user_id).filter(Boolean))];
+      if (!userIds.length) return {};
+      const { data } = await (supabase as any)
+        .from("profiles")
+        .select("user_id,first_name")
+        .in("user_id", userIds);
+      return Object.fromEntries((data ?? []).map((p: any) => [p.user_id, p.first_name]));
     },
   });
 
@@ -209,10 +223,10 @@ const Drafts = () => {
                       <FileText className="h-3.5 w-3.5" />
                       {d.created_label}
                     </span>
-                    {d.profiles?.first_name && (
+                    {d.user_id && profilesMap[d.user_id] && (
                       <span className="flex items-center gap-1 bg-secondary px-1.5 py-0.5 rounded">
                         <User className="h-3 w-3" />
-                        {d.profiles.first_name}
+                        {profilesMap[d.user_id]}
                       </span>
                     )}
                   </div>
