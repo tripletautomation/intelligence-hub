@@ -464,9 +464,9 @@ const Dashboard = () => {
             <div className="w-px h-5 bg-border hidden sm:block" />
             <div className="flex items-center gap-2 flex-wrap">
               {([
-                { type: "linkedin" as GenerateType, label: "מאמר LinkedIn" },
-                { type: "blog_he" as GenerateType, label: "בלוג עברית" },
-                { type: "blog_en" as GenerateType, label: "Blog English" },
+                { type: "linkedin" as GenerateType, label: "פוסט" },
+                { type: "blog_he" as GenerateType, label: "מאמר עברית" },
+                { type: "blog_en" as GenerateType, label: "מאמר אנגלית" },
               ]).map(({ type, label }) => (
                 <Button
                   key={type}

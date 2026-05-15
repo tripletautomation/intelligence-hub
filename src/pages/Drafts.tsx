@@ -34,9 +34,9 @@ interface DraftRow {
 }
 
 const CONTENT_TYPE_LABEL: Record<ContentType, string> = {
-  linkedin: "LinkedIn",
-  blog_he: "בלוג עברית",
-  blog_en: "בלוג English",
+  linkedin: "פוסט",
+  blog_he: "מאמר עברית",
+  blog_en: "מאמר אנגלית",
 };
 
 const CONTENT_TYPE_COLOR: Record<ContentType, string> = {
@@ -183,7 +183,7 @@ const Drafts = () => {
 
       {/* Content type filter */}
       <div className="flex flex-wrap gap-2 mb-4">
-        {([["all", "הכל"], ["linkedin", "LinkedIn"], ["blog_he", 'בלוג עברית'], ["blog_en", "בלוג English"]] as [string, string][]).map(([id, label]) => (
+        {([["all", "הכל"], ["linkedin", "פוסט"], ["blog_he", "מאמר עברית"], ["blog_en", "מאמר אנגלית"]] as [string, string][]).map(([id, label]) => (
           <button
             key={id}
             onClick={() => setContentFilter(id as ContentType | "all")}
