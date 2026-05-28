@@ -663,6 +663,33 @@ const DraftDetail = () => {
                   className={cn("text-sm leading-relaxed", textAlign)}
                 />
               </div>
+
+              {/* Source links */}
+              {activeSources.some((s) => s.url) && (
+                <div className="border-t border-border pt-4 space-y-1.5">
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground">מקורות</div>
+                  <div className="space-y-1">
+                    {activeSources.filter((s) => s.url).map((src) => (
+                      <div key={sourceKey(src)} className="flex items-start gap-1.5 text-xs">
+                        <span className={cn(
+                          "shrink-0 mt-0.5 rounded px-1 py-0.5 text-[10px] font-medium",
+                          src.kind === "db" ? "bg-muted text-muted-foreground" : "bg-accent/15 text-accent"
+                        )}>
+                          {src.kind === "db" ? "DB" : "WEB"}
+                        </span>
+                        <a
+                          href={src.url!}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-muted-foreground hover:text-accent hover:underline leading-relaxed line-clamp-1 flex-1"
+                        >
+                          {src.title} — <span className="font-mono text-[10px]">{src.url}</span>
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </Card>
           </div>
 

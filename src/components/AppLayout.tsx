@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
@@ -13,8 +13,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, Search, Settings, Shield, ChevronDown, User } from "lucide-react";
+import { LogOut, Search, Settings, Shield, ChevronDown, User, PenLine } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NewArticleSheet } from "@/components/NewArticleSheet";
 
 interface Props {
   children: ReactNode;
@@ -36,6 +37,7 @@ export const AppLayout = ({ children, search, onSearchChange }: Props) => {
   const { data: isAdmin } = useIsAdmin();
   const greetingName = profile?.first_name?.trim() || user?.email?.split("@")[0] || "";
   const nav = useNavigate();
+  const [newArticleOpen, setNewArticleOpen] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
@@ -94,7 +96,7 @@ export const AppLayout = ({ children, search, onSearchChange }: Props) => {
           </DropdownMenu>
         </div>
 
-        <nav className="max-w-7xl mx-auto px-6 flex gap-1 border-t border-border">
+        <nav className="max-w-7xl mx-auto px-6 flex items-center gap-1 border-t border-border">
           {tabs.map((t) => (
             <NavLink
               key={t.to}
@@ -112,10 +114,23 @@ export const AppLayout = ({ children, search, onSearchChange }: Props) => {
               {t.label}
             </NavLink>
           ))}
+          <div className="mr-auto pb-1">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 h-7 text-xs border-accent/40 text-accent hover:bg-accent/10"
+              onClick={() => setNewArticleOpen(true)}
+            >
+              <PenLine className="h-3.5 w-3.5" />
+              מאמר מנושא
+            </Button>
+          </div>
         </nav>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8">{children}</main>
+
+      <NewArticleSheet open={newArticleOpen} onOpenChange={setNewArticleOpen} />
     </div>
   );
 };
