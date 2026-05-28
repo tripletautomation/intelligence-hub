@@ -122,6 +122,9 @@ Deno.serve(async (req) => {
     const custom_instruction: string | undefined = typeof (body as any).custom_instruction === "string"
       ? (body as any).custom_instruction.trim() || undefined
       : undefined;
+    const article_instructions: string | undefined = typeof (body as any).article_instructions === "string"
+      ? (body as any).article_instructions.trim() || undefined
+      : undefined;
 
     if (!draft_id || !section || !action) return json({ error: "חסרים פרמטרים" }, 400);
 
@@ -152,9 +155,12 @@ Deno.serve(async (req) => {
       ? `${systemPromptBase}\n\nהנחיות סגנון קבועות (שמור עליהן):\n${writingStylePrompt}`
       : systemPromptBase;
 
-    const effectiveAction = (action === "rephrase" && custom_instruction)
-      ? `נסח מחדש לפי ההנחייה הספציפית הבאה: ${custom_instruction}`
-      : actionInstruction;
+    let effectiveAction = actionInstruction;
+    if (action === "rephrase" && custom_instruction) {
+      effectiveAction = `נסח מחדש לפי ההנחייה הספציפית הבאה: ${custom_instruction}`;
+    } else if (action === "regenerate" && article_instructions) {
+      effectiveAction = `כתוב את הקטע מחדש לחלוטין בהתאם להנחיות הבאות של המשתמש:\n${article_instructions}`;
+    }
 
     const userPrompt = `כותרת המאמר: "${article_context.title}"
 

@@ -276,6 +276,7 @@ const DraftDetail = () => {
           action,
           tone: activeTone,
           custom_instruction: customInstruction || undefined,
+          article_instructions: form.instructions || undefined,
           article_context: { title: form.title, intro: "", body: form.body, closing: "" },
         },
       });
