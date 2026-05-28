@@ -171,6 +171,10 @@ Deno.serve(async (req) => {
     const contentType = language === "en" ? "blog_en" : "blog_he";
     const styleNote: string | null = typeof body?.style_note === "string" && body.style_note.trim()
       ? body.style_note.trim() : null;
+    const instructions: string | null = typeof body?.instructions === "string" && body.instructions.trim()
+      ? body.instructions.trim() : null;
+    const sourceNotes: Record<string, string> = (body?.source_notes && typeof body.source_notes === "object")
+      ? body.source_notes : {};
     const webContext: string | null = typeof body?.web_context === "string" && body.web_context.trim()
       ? body.web_context.trim() : null;
 
@@ -209,12 +213,14 @@ Deno.serve(async (req) => {
 
     const sourceBlock = items
       .map((it, idx) => {
+        const note = sourceNotes[`db:${it.id}`];
         const lines = [
           `[#${idx + 1}] ${it.title_he}`,
           it.summary_he ? `Summary: ${it.summary_he}` : null,
           it.why_it_matters ? `Why it matters: ${it.why_it_matters}` : null,
           it.tags_ai?.length ? `Tags: ${it.tags_ai.join(", ")}` : null,
           it.url ? `Source: ${it.url}` : null,
+          note ? `Specific note for this source: ${note}` : null,
         ].filter(Boolean);
         return lines.join("\n");
       })
@@ -224,6 +230,7 @@ Deno.serve(async (req) => {
       items.length > 0
         ? `Create a blog post from these ${items.length} source items:`
         : "Create a blog post from the following web research:",
+      instructions ? `\nUser instructions for this article:\n${instructions}` : "",
       styleNote ? `\nStyle note: ${styleNote}` : "",
       webContext ? `\n--- Web research ---\n${webContext}` : "",
       items.length > 0 ? `\n--- Source items ---\n${sourceBlock}` : "",

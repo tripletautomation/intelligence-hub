@@ -20,7 +20,7 @@ import {
   ArrowRight, Loader2, Save, Trash2, Mail, Copy, Check,
   Wand2, Maximize2, Minimize2, RefreshCw, Sparkles,
   Globe, Plus, X, Linkedin, Image,
-  Share2,
+  Share2, ChevronDown, ChevronUp, Lightbulb,
 } from "lucide-react";
 import { toast } from "sonner";
 import { buildEmailBodyHtml } from "@/lib/articleHtml";
@@ -34,8 +34,11 @@ interface Draft {
   intro: string | null;
   body: string | null;
   closing: string | null;
+  instructions: string | null;
+  source_notes: Record<string, string> | null;
   source_item_ids: string[];
   style_note: string | null;
+  content_type: string | null;
   created_at: string;
 }
 
@@ -44,12 +47,11 @@ interface SourceItem { id: string; title_he: string; url: string | null; }
 interface ResearchBlock { title: string; snippet: string; url: string; relevance: number; }
 
 type UnifiedSource =
-  | { kind: "db"; id: string; title: string; url: string | null }
-  | { kind: "web"; title: string; snippet: string; url: string; relevance: number };
+  | { kind: "db"; id: string; title: string; url: string | null; note: string }
+  | { kind: "web"; title: string; snippet: string; url: string; relevance: number; note: string };
 
 interface SocialPosts { linkedin_en: string; linkedin_he: string; image_prompt: string; }
 
-type Section = "intro" | "body" | "closing";
 type AiAction = "regenerate" | "expand" | "condense" | "rephrase";
 type Tone = "formal" | "analytical" | "concise";
 type MainTab = "editor" | "social" | "images";
@@ -57,8 +59,6 @@ type ImageType = "hero" | "square" | "newsletter" | "infographic";
 type Platform = "linkedin_en" | "linkedin_he" | "image_prompt";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const SECTION_LABELS: Record<Section, string> = { intro: "פתיח", body: "גוף המאמר", closing: "סיכום" };
 
 const AI_ACTIONS: { id: AiAction; label: string; icon: React.ReactNode }[] = [
   { id: "regenerate", label: "כתוב מחדש", icon: <RefreshCw className="h-3.5 w-3.5" /> },
@@ -79,6 +79,10 @@ const PLATFORMS: { id: Platform; label: string; icon: React.ReactNode; idealMin:
   { id: "image_prompt", label: "Image Prompt", icon: <Image className="h-4 w-4" />, idealMin: null, idealMax: null, hardMax: null, color: "text-purple-600", isPrompt: true },
 ];
 
+function sourceKey(src: UnifiedSource): string {
+  return src.kind === "db" ? `db:${src.id}` : `web:${src.url}`;
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const DraftDetail = () => {
@@ -89,13 +93,13 @@ const DraftDetail = () => {
 
   const [mainTab, setMainTab] = useState<MainTab>("editor");
   const [copied, setCopied] = useState(false);
-  const [activeSection, setActiveSection] = useState<Section>("intro");
   const [activeTone, setActiveTone] = useState<Tone>("formal");
   const [refineLoading, setRefineLoading] = useState(false);
 
-  // Unified sources panel (DB items + web research blocks combined)
+  // Sources
   const [activeSources, setActiveSources] = useState<UnifiedSource[]>([]);
   const [sourcesInitialized, setSourcesInitialized] = useState(false);
+  const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
 
   // Web research
   const [researchQuery, setResearchQuery] = useState("");
@@ -103,7 +107,7 @@ const DraftDetail = () => {
   const [researchBlocks, setResearchBlocks] = useState<ResearchBlock[]>([]);
   const [regenerateLoading, setRegenerateLoading] = useState(false);
 
-  // Rephrase with custom instruction
+  // Rephrase
   const [showRephraseInput, setShowRephraseInput] = useState(false);
   const [rephraseInstruction, setRephraseInstruction] = useState("");
 
@@ -120,7 +124,6 @@ const DraftDetail = () => {
   const [imagePrompts, setImagePrompts] = useState<Partial<Record<ImageType, string>>>({});
   const [imageLoading, setImageLoading] = useState(false);
   const [copiedImage, setCopiedImage] = useState<ImageType | null>(null);
-
 
   // ── Queries ──────────────────────────────────────────────────────────────────
 
@@ -146,7 +149,6 @@ const DraftDetail = () => {
     },
   });
 
-  // Load saved social posts
   const { data: savedPosts } = useQuery({
     enabled: !!user && !!id,
     queryKey: ["social_posts", id],
@@ -168,7 +170,6 @@ const DraftDetail = () => {
     }
   }, [savedPosts]);
 
-  // Load saved image prompts
   const { data: savedImages } = useQuery({
     enabled: !!user && !!id,
     queryKey: ["content_images", id],
@@ -190,28 +191,62 @@ const DraftDetail = () => {
 
   // ── Form state ───────────────────────────────────────────────────────────────
 
-  const [form, setForm] = useState<Pick<Draft, "title" | "intro" | "body" | "closing">>({
-    title: "", intro: "", body: "", closing: "",
+  const [form, setForm] = useState<{ title: string; body: string; instructions: string }>({
+    title: "", body: "", instructions: "",
   });
+
   useEffect(() => {
-    if (draft) setForm({ title: draft.title ?? "", intro: draft.intro ?? "", body: draft.body ?? "", closing: draft.closing ?? "" });
+    if (draft) {
+      const merged = [draft.intro, draft.body, draft.closing]
+        .filter((s) => s?.trim())
+        .join("\n\n");
+      setForm({
+        title: draft.title ?? "",
+        body: merged,
+        instructions: draft.instructions ?? "",
+      });
+    }
   }, [draft]);
 
-  // Initialize activeSources with DB source items once they load
+  // Initialize activeSources with DB items + saved source_notes
   useEffect(() => {
     if (sourceItems.length > 0 && !sourcesInitialized) {
-      setActiveSources(sourceItems.map((s) => ({ kind: "db" as const, id: s.id, title: s.title_he, url: s.url })));
+      const savedNotes: Record<string, string> = (draft?.source_notes as Record<string, string>) ?? {};
+      setActiveSources(
+        sourceItems.map((s) => ({
+          kind: "db" as const,
+          id: s.id,
+          title: s.title_he,
+          url: s.url,
+          note: savedNotes[`db:${s.id}`] ?? "",
+        }))
+      );
       setSourcesInitialized(true);
     }
-  }, [sourceItems, sourcesInitialized]);
+  }, [sourceItems, sourcesInitialized, draft?.source_notes]);
 
   // ── Mutations ────────────────────────────────────────────────────────────────
+
+  const buildSourceNotes = () => {
+    const notes: Record<string, string> = {};
+    activeSources.forEach((src) => {
+      if (src.note.trim()) notes[sourceKey(src)] = src.note.trim();
+    });
+    return notes;
+  };
 
   const save = useMutation({
     mutationFn: async () => {
       const { error } = await (supabase as any)
         .from("article_drafts")
-        .update({ title: form.title, intro: form.intro, body: form.body, closing: form.closing })
+        .update({
+          title: form.title,
+          intro: "",
+          body: form.body,
+          closing: "",
+          instructions: form.instructions || null,
+          source_notes: buildSourceNotes(),
+        })
         .eq("id", id);
       if (error) throw error;
     },
@@ -230,44 +265,49 @@ const DraftDetail = () => {
 
   // ── AI Actions ───────────────────────────────────────────────────────────────
 
-  const [refiningSection, setRefiningSection] = useState<Section | null>(null);
-
-  const runRefine = async (action: AiAction, customInstruction?: string, sectionOverride?: Section) => {
-    const sec = sectionOverride ?? activeSection;
-    setActiveSection(sec);
+  const runRefine = async (action: AiAction, customInstruction?: string) => {
     setRefineLoading(true);
-    setRefiningSection(sec);
     setShowRephraseInput(false);
     try {
       const { data, error } = await supabase.functions.invoke("refine-section", {
         body: {
-          draft_id: id, section: sec, action, tone: activeTone,
+          draft_id: id,
+          section: "body",
+          action,
+          tone: activeTone,
           custom_instruction: customInstruction || undefined,
-          article_context: { title: form.title, intro: form.intro ?? "", body: form.body ?? "", closing: form.closing ?? "" },
+          article_context: { title: form.title, intro: "", body: form.body, closing: "" },
         },
       });
       if (error) throw new Error(error.message);
       const refined: string = (data as any)?.refined;
       if (!refined) throw new Error("AI לא החזיר תוצאה");
-      setForm((f) => ({ ...f, [sec]: refined }));
-      toast.success(`${SECTION_LABELS[sec]} עודכן`);
+      setForm((f) => ({ ...f, body: refined }));
+      toast.success("המאמר עודכן");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "שגיאה ב-AI");
-    } finally { setRefineLoading(false); setRefiningSection(null); }
+    } finally { setRefineLoading(false); }
   };
 
   const runRegenerateWithContext = async () => {
     if (activeSources.length === 0) return;
     setRegenerateLoading(true);
     try {
-      const dbIds = activeSources.filter((s) => s.kind === "db").map((s) => (s as Extract<UnifiedSource, { kind: "db" }>).id);
+      const dbIds = activeSources
+        .filter((s) => s.kind === "db")
+        .map((s) => (s as Extract<UnifiedSource, { kind: "db" }>).id);
       const webSources = activeSources.filter((s) => s.kind === "web") as Extract<UnifiedSource, { kind: "web" }>[];
-      const webContext = webSources.map((b) => `${b.title}\n${b.snippet}\nמקור: ${b.url}`).join("\n\n---\n\n");
+      const webContext = webSources
+        .map((b) => `${b.title}\n${b.snippet}\nמקור: ${b.url}${b.note ? `\nהערה: ${b.note}` : ""}`)
+        .join("\n\n---\n\n");
+      const sourceNotes = buildSourceNotes();
+
       const { data, error } = await supabase.functions.invoke("generate-article", {
         body: {
           item_ids: dbIds.length ? dbIds : draft?.source_item_ids,
           web_context: webContext || undefined,
-          style_note: draft?.style_note,
+          instructions: form.instructions || undefined,
+          source_notes: Object.keys(sourceNotes).length ? sourceNotes : undefined,
           target_words: "medium",
         },
       });
@@ -301,7 +341,7 @@ const DraftDetail = () => {
     setActiveSources((prev) => {
       const exists = prev.some((s) => s.kind === "web" && s.url === block.url);
       if (exists) return prev.filter((s) => !(s.kind === "web" && s.url === block.url));
-      return [...prev, { kind: "web" as const, ...block }];
+      return [...prev, { kind: "web" as const, ...block, note: "" }];
     });
   };
 
@@ -313,11 +353,31 @@ const DraftDetail = () => {
     );
   };
 
+  const updateSourceNote = (src: UnifiedSource, note: string) => {
+    setActiveSources((prev) =>
+      prev.map((s) =>
+        sourceKey(s) === sourceKey(src) ? { ...s, note } : s
+      )
+    );
+  };
+
+  const toggleNoteExpanded = (key: string) => {
+    setExpandedNotes((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   const generateSocialPosts = async () => {
     setSocialLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("generate-social-posts", {
-        body: { draft_id: id },
+        body: {
+          draft_id: id,
+          instructions: form.instructions || undefined,
+        },
       });
       if (error) throw new Error(error.message);
       const posts = (data as any)?.posts as SocialPosts;
@@ -348,8 +408,7 @@ const DraftDetail = () => {
   };
 
   const copyImagePrompt = async (type: ImageType) => {
-    const text = imagePrompts[type] ?? "";
-    await navigator.clipboard.writeText(text).catch(() => toast.error("לא ניתן להעתיק"));
+    await navigator.clipboard.writeText(imagePrompts[type] ?? "").catch(() => toast.error("לא ניתן להעתיק"));
     setCopiedImage(type);
     setTimeout(() => setCopiedImage(null), 1500);
   };
@@ -363,8 +422,7 @@ const DraftDetail = () => {
   };
 
   const copyPlatform = async (platform: Platform) => {
-    const text = socialPosts?.[platform] ?? "";
-    await navigator.clipboard.writeText(text).catch(() => toast.error("לא ניתן להעתיק"));
+    await navigator.clipboard.writeText(socialPosts?.[platform] ?? "").catch(() => toast.error("לא ניתן להעתיק"));
     setCopiedPlatform(platform);
     setTimeout(() => setCopiedPlatform(null), 1500);
   };
@@ -387,21 +445,27 @@ const DraftDetail = () => {
       setSocialPosts((p) => p ? { ...p, [platform]: refined } : p);
       setSocialAiPlatform(null);
       setSocialAiInstruction("");
-      toast.success(`פוסט ${platform} עודכן`);
+      toast.success(`פוסט עודכן`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "שגיאה ב-AI");
     } finally { setSocialAiLoading(false); }
   };
 
   const copyHtmlToClipboard = async () => {
-    const opts = { title: form.title, intro: form.intro ?? "", body: form.body ?? "", closing: form.closing ?? "", contentType: draft?.content_type ?? undefined };
+    const opts = {
+      title: form.title,
+      intro: "",
+      body: form.body ?? "",
+      closing: "",
+      contentType: draft?.content_type ?? undefined,
+    };
     const html = buildEmailBodyHtml(opts);
     try {
       await navigator.clipboard.write([
         new ClipboardItem({ "text/html": new Blob([html], { type: "text/html" }) }),
       ]);
     } catch {
-      await navigator.clipboard.writeText(`${form.title}\n\n${fullText}`).catch(() => {});
+      await navigator.clipboard.writeText(`${form.title}\n\n${form.body}`).catch(() => {});
     }
   };
 
@@ -421,14 +485,8 @@ const DraftDetail = () => {
     toast.info("Gmail נפתח — הדבק את המאמר המעוצב בגוף (Ctrl+V)");
   };
 
-  // ── Derived ──────────────────────────────────────────────────────────────────
-
-  const fullText = useMemo(
-    () => [form.intro, form.body, form.closing].filter((s) => s?.trim()).join("\n\n"),
-    [form],
-  );
   const onCopy = async () => {
-    await navigator.clipboard.writeText(`${form.title}\n\n${fullText}`).catch(() => toast.error("לא ניתן להעתיק"));
+    await navigator.clipboard.writeText(`${form.title}\n\n${form.body}`).catch(() => toast.error("לא ניתן להעתיק"));
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -437,6 +495,10 @@ const DraftDetail = () => {
 
   if (isLoading) return <AppLayout><div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div></AppLayout>;
   if (!draft) return <AppLayout><div className="surface-card p-12 text-center text-muted-foreground">הטיוטה לא נמצאה. <Link to="/drafts" className="text-accent hover:underline">חזור לטיוטות</Link></div></AppLayout>;
+
+  const isEn = draft?.content_type === "blog_en";
+  const textDir = isEn ? "ltr" : "rtl";
+  const textAlign = isEn ? "text-left" : "text-right";
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -494,84 +556,77 @@ const DraftDetail = () => {
 
       {/* ── EDITOR TAB ─────────────────────────────────────────────────────────── */}
       {mainTab === "editor" && (
-        <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
-          {/* Editor */}
-          <Card className="p-6 space-y-5">
-            {(() => {
-              const isEn = draft?.content_type === "blog_en";
-              const textDir = isEn ? "ltr" : "rtl";
-              const textAlign = isEn ? "text-left" : "text-right";
-              return (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="title" className="text-xs uppercase tracking-wider text-muted-foreground">כותרת</Label>
-                    <Input id="title" value={form.title} dir={textDir}
-                      onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                      className={cn("text-xl font-bold", textAlign)} />
-                  </div>
-                  {(["intro", "body", "closing"] as Section[]).map((sec) => (
-                    <div key={sec} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs uppercase tracking-wider text-muted-foreground">{SECTION_LABELS[sec]}</Label>
-                        <div className="flex items-center gap-0.5">
-                          {refiningSection === sec
-                            ? <Loader2 className="h-3.5 w-3.5 animate-spin text-accent mx-1" />
-                            : AI_ACTIONS.map((action) => (
-                                <button key={action.id} type="button"
-                                  disabled={refineLoading}
-                                  title={action.label}
-                                  onClick={() => {
-                                    if (action.id === "rephrase") {
-                                      setActiveSection(sec);
-                                      setShowRephraseInput((v) => activeSection === sec ? !v : true);
-                                    } else {
-                                      runRefine(action.id, undefined, sec);
-                                    }
-                                  }}
-                                  className="p-1.5 rounded text-muted-foreground hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-40">
-                                  {action.icon}
-                                </button>
-                              ))
-                          }
-                        </div>
-                      </div>
-                      <AutoResizeTextarea id={sec} value={(form[sec] as string) ?? ""}
-                        onChange={(e) => setForm((f) => ({ ...f, [sec]: e.target.value }))}
-                        minRows={sec === "body" ? 10 : 5}
-                        dir={textDir}
-                        className={textAlign} />
-                    </div>
-                  ))}
-                </>
-              );
-            })()}
-          </Card>
-
-          {/* Sidebar */}
-          <aside className="space-y-4">
-            {/* AI Refine */}
-            <Card className="p-4 space-y-4">
-              <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-accent" /><div className="text-sm font-semibold text-primary">כלי AI</div></div>
-              <div className="text-xs text-muted-foreground leading-relaxed">
-                לחץ על אחד הכפתורים מעל כל קטע כדי לערוך אותו ישירות.<br />
-                <span className="inline-flex gap-2 mt-1 items-center flex-wrap">
-                  <span title="כתוב מחדש"><RefreshCw className="h-3 w-3 inline" /> כתוב מחדש</span>
-                  <span title="הרחב"><Maximize2 className="h-3 w-3 inline" /> הרחב</span>
-                  <span title="קצר"><Minimize2 className="h-3 w-3 inline" /> קצר</span>
-                  <span title="נסח מחדש"><Wand2 className="h-3 w-3 inline" /> נסח מחדש</span>
-                </span>
+        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+          {/* Main editor area */}
+          <div className="space-y-4">
+            {/* Instructions card */}
+            <Card className="p-4 border-accent/30 bg-accent/5 space-y-2">
+              <div className="flex items-center gap-2">
+                <Lightbulb className="h-4 w-4 text-accent" />
+                <div className="text-sm font-semibold text-primary">הנחיות ל-AI</div>
+                <span className="text-xs text-muted-foreground">— מה לכתוב, זווית, נקודות שחשוב לכלול</span>
               </div>
+              <Textarea
+                value={form.instructions}
+                onChange={(e) => setForm((f) => ({ ...f, instructions: e.target.value }))}
+                placeholder="לדוגמה: תתמקד בהשפעה על Data Centers בישראל, הוסף נתוני שוק, הזווית צריכה להיות מעשית ולא אקדמית. הדגש שלוש נקודות: עלות, זמן, אבטחה."
+                rows={3}
+                className="text-sm resize-none bg-background"
+                dir="rtl"
+              />
+            </Card>
+
+            {/* Article editor */}
+            <Card className="p-6 space-y-4">
+              {/* Title */}
               <div className="space-y-2">
-                <div className="text-xs text-muted-foreground uppercase tracking-wider">טון לעריכה</div>
-                <Select value={activeTone} onValueChange={(v) => setActiveTone(v as Tone)}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>{TONES.map((t) => <SelectItem key={t.id} value={t.id} className="text-xs">{t.label}</SelectItem>)}</SelectContent>
-                </Select>
+                <Label htmlFor="title" className="text-xs uppercase tracking-wider text-muted-foreground">כותרת</Label>
+                <Input
+                  id="title"
+                  value={form.title}
+                  dir={textDir}
+                  onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                  className={cn("text-xl font-bold", textAlign)}
+                />
               </div>
 
+              {/* AI action bar */}
+              <div className="flex items-center gap-2 flex-wrap border-b border-border pb-3">
+                <span className="text-xs text-muted-foreground ml-1">AI:</span>
+                {refineLoading
+                  ? <Loader2 className="h-4 w-4 animate-spin text-accent mx-1" />
+                  : AI_ACTIONS.map((action) => (
+                      <Button
+                        key={action.id}
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2.5 text-xs gap-1.5"
+                        disabled={refineLoading}
+                        onClick={() => {
+                          if (action.id === "rephrase") {
+                            setShowRephraseInput((v) => !v);
+                          } else {
+                            runRefine(action.id);
+                          }
+                        }}
+                      >
+                        {action.icon} {action.label}
+                      </Button>
+                    ))
+                }
+                <div className="flex items-center gap-1.5 mr-auto">
+                  <span className="text-xs text-muted-foreground">טון:</span>
+                  <Select value={activeTone} onValueChange={(v) => setActiveTone(v as Tone)}>
+                    <SelectTrigger className="h-7 text-xs w-28"><SelectValue /></SelectTrigger>
+                    <SelectContent>{TONES.map((t) => <SelectItem key={t.id} value={t.id} className="text-xs">{t.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Rephrase input */}
               {showRephraseInput && (
                 <div className="space-y-2 border border-accent/30 rounded-md p-3 bg-accent/5">
-                  <div className="text-xs text-muted-foreground">הנחייה לניסוח ({SECTION_LABELS[activeSection]})</div>
+                  <div className="text-xs text-muted-foreground">הנחייה לניסוח מחדש</div>
                   <Textarea
                     autoFocus
                     placeholder="לדוגמה: תהפוך את זה לפחות טכני, הוסף נתוני שוק..."
@@ -579,7 +634,7 @@ const DraftDetail = () => {
                     onChange={(e) => setRephraseInstruction(e.target.value)}
                     rows={2}
                     className="text-xs"
-                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); runRefine("rephrase", rephraseInstruction); }}}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); runRefine("rephrase", rephraseInstruction); } }}
                   />
                   <div className="flex gap-2">
                     <Button size="sm" className="h-7 text-xs flex-1" disabled={refineLoading}
@@ -594,9 +649,25 @@ const DraftDetail = () => {
                   </div>
                 </div>
               )}
-            </Card>
 
-            {/* Unified Sources Panel */}
+              {/* Unified content editor */}
+              <div className="space-y-2">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">תוכן המאמר</Label>
+                <AutoResizeTextarea
+                  id="body"
+                  value={form.body ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
+                  minRows={20}
+                  dir={textDir}
+                  className={cn("text-sm leading-relaxed", textAlign)}
+                />
+              </div>
+            </Card>
+          </div>
+
+          {/* Sidebar */}
+          <aside className="space-y-4">
+            {/* Sources */}
             <Card className="p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -606,38 +677,66 @@ const DraftDetail = () => {
                 <span className="text-xs text-muted-foreground">{activeSources.length} מקורות</span>
               </div>
 
-              {/* Active sources list */}
               {activeSources.length > 0 && (
-                <div className="space-y-1 max-h-48 overflow-y-auto">
+                <div className="space-y-2 max-h-64 overflow-y-auto">
                   {activeSources.map((src) => {
-                    const key = src.kind === "db" ? src.id : src.url;
-                    const title = src.title;
-                    const url = src.url;
+                    const key = sourceKey(src);
+                    const isExpanded = expandedNotes.has(key);
                     return (
-                      <div key={key} className="flex items-start gap-1.5 text-xs group">
-                        <span className={cn(
-                          "shrink-0 mt-0.5 rounded px-1 py-0.5 text-[10px] font-medium",
-                          src.kind === "db" ? "bg-muted text-muted-foreground" : "bg-accent/15 text-accent"
-                        )}>
-                          {src.kind === "db" ? "DB" : "WEB"}
-                        </span>
-                        <span className="flex-1 leading-tight line-clamp-2 text-foreground/80 pt-0.5">
-                          {url
-                            ? <a href={url} target="_blank" rel="noreferrer" className="hover:text-accent">{title}</a>
-                            : title}
-                        </span>
-                        <button type="button" onClick={() => removeSource(src)}
-                          className="shrink-0 text-muted-foreground hover:text-destructive transition-colors mt-0.5 opacity-0 group-hover:opacity-100">
-                          <X className="h-3 w-3" />
-                        </button>
+                      <div key={key} className="border border-border rounded-md p-2 space-y-1.5">
+                        <div className="flex items-start gap-1.5">
+                          <span className={cn(
+                            "shrink-0 mt-0.5 rounded px-1 py-0.5 text-[10px] font-medium",
+                            src.kind === "db" ? "bg-muted text-muted-foreground" : "bg-accent/15 text-accent"
+                          )}>
+                            {src.kind === "db" ? "DB" : "WEB"}
+                          </span>
+                          <span className="flex-1 text-xs leading-tight line-clamp-2 text-foreground/80 pt-0.5">
+                            {src.url
+                              ? <a href={src.url} target="_blank" rel="noreferrer" className="hover:text-accent">{src.title}</a>
+                              : src.title}
+                          </span>
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            <button
+                              type="button"
+                              title={isExpanded ? "סגור הערה" : "הוסף הערה"}
+                              onClick={() => toggleNoteExpanded(key)}
+                              className="p-1 rounded text-muted-foreground hover:text-accent transition-colors"
+                            >
+                              {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeSource(src)}
+                              className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+                        {isExpanded && (
+                          <Textarea
+                            autoFocus
+                            placeholder="מה לקחת מהמקור הזה? (לדוגמה: השתמש בנתון X, הזכר את הגישה Y)"
+                            value={src.note}
+                            onChange={(e) => updateSourceNote(src, e.target.value)}
+                            rows={2}
+                            className="text-xs resize-none"
+                            dir="rtl"
+                          />
+                        )}
                       </div>
                     );
                   })}
                 </div>
               )}
 
-              <Button size="sm" className="w-full h-8 text-xs gap-1.5" disabled={regenerateLoading || activeSources.length === 0}
-                onClick={runRegenerateWithContext}>
+              <Button
+                size="sm"
+                className="w-full h-8 text-xs gap-1.5"
+                disabled={regenerateLoading || activeSources.length === 0}
+                onClick={runRegenerateWithContext}
+              >
                 {regenerateLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                 {regenerateLoading ? "יוצר מאמר..." : "צור מאמר עם מקורות אלה"}
               </Button>
@@ -646,10 +745,13 @@ const DraftDetail = () => {
               <div className="border-t border-border pt-3 space-y-2">
                 <div className="text-xs text-muted-foreground font-medium">הוסף מקורות מהאינטרנט</div>
                 <div className="flex gap-2">
-                  <Input placeholder="נושא לחיפוש..." value={researchQuery}
+                  <Input
+                    placeholder="נושא לחיפוש..."
+                    value={researchQuery}
                     onChange={(e) => setResearchQuery(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && runResearch()}
-                    className="h-8 text-xs flex-1" />
+                    className="h-8 text-xs flex-1"
+                  />
                   <Button size="sm" variant="outline" className="h-8 shrink-0"
                     disabled={researchLoading || !researchQuery.trim()} onClick={runResearch}>
                     {researchLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "חפש"}
@@ -680,13 +782,6 @@ const DraftDetail = () => {
                 )}
               </div>
             </Card>
-
-            {draft.style_note && (
-              <Card className="p-4">
-                <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">הערת סגנון</div>
-                <p className="text-sm text-foreground/80">{draft.style_note}</p>
-              </Card>
-            )}
           </aside>
         </div>
       )}
@@ -697,13 +792,20 @@ const DraftDetail = () => {
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h2 className="text-base font-semibold text-primary">פוסטים לרשתות חברתיות</h2>
-              <p className="text-sm text-muted-foreground">AI ממיר את המאמר לפוסט ייעודי לכל פלטפורמה — בעברית</p>
+              <p className="text-sm text-muted-foreground">AI ממיר את המאמר לפוסט ייעודי לכל פלטפורמה</p>
             </div>
             <Button onClick={generateSocialPosts} disabled={socialLoading} className="gap-2">
               {socialLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               {socialPosts ? "עדכן פוסטים" : "צור פוסטים"}
             </Button>
           </div>
+
+          {form.instructions && (
+            <div className="flex items-start gap-2 p-3 rounded-md border border-accent/30 bg-accent/5 text-xs text-muted-foreground">
+              <Lightbulb className="h-3.5 w-3.5 text-accent shrink-0 mt-0.5" />
+              <span>ההנחיות ל-AI מהעורך ישמשו גם ביצירת הפוסטים</span>
+            </div>
+          )}
 
           {!socialPosts && !socialLoading && (
             <div className="surface-card p-12 text-center text-muted-foreground">
@@ -805,6 +907,7 @@ const DraftDetail = () => {
           )}
         </div>
       )}
+
       {/* ── IMAGES TAB ────────────────────────────────────────────────────────── */}
       {mainTab === "images" && (
         <div className="space-y-4">
@@ -841,12 +944,7 @@ const DraftDetail = () => {
                     <p className="text-xs text-muted-foreground mt-0.5">{hint}</p>
                   </div>
                   {prompt && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => copyImagePrompt(type)}
-                      className="gap-1.5 shrink-0 h-8"
-                    >
+                    <Button size="sm" variant="outline" onClick={() => copyImagePrompt(type)} className="gap-1.5 shrink-0 h-8">
                       {isCopied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
                       {isCopied ? "הועתק!" : "העתק"}
                     </Button>

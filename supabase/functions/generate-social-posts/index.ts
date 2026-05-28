@@ -122,16 +122,20 @@ async function generatePosts(
   apiKey: string,
   provider: string,
   modelId: string,
+  instructions?: string,
 ): Promise<SocialPosts> {
-  const userPrompt = `Article title: ${article.title}
-
-Intro (Hebrew): ${article.intro}
-
-Body (Hebrew): ${article.body}
-
-Closing (Hebrew): ${article.closing}
-
-Generate all 3 outputs as specified.`;
+  const userPrompt = [
+    instructions ? `Article writing instructions (use to guide tone and angle of posts):\n${instructions}\n` : "",
+    `Article title: ${article.title}`,
+    ``,
+    `Intro (Hebrew): ${article.intro}`,
+    ``,
+    `Body (Hebrew): ${article.body}`,
+    ``,
+    `Closing (Hebrew): ${article.closing}`,
+    ``,
+    `Generate all 3 outputs as specified.`,
+  ].join("\n");
 
   const tool = {
     type: "function",
@@ -226,6 +230,8 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const draftId: string = body?.draft_id ?? "";
     if (!draftId) return json({ error: "draft_id is required" }, 400);
+    const instructions: string | undefined = typeof body?.instructions === "string" && body.instructions.trim()
+      ? body.instructions.trim() : undefined;
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
@@ -260,7 +266,7 @@ Deno.serve(async (req) => {
       return json({ posts: { [refinePlatform]: refined } });
     }
 
-    const posts = await generatePosts(draft as any, apiKey, provider, modelId);
+    const posts = await generatePosts(draft as any, apiKey, provider, modelId, instructions);
 
     const rows = (["linkedin_en", "linkedin_he", "image_prompt"] as const).map((platform) => ({
       draft_id: draftId,

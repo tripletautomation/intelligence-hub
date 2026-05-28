@@ -166,6 +166,10 @@ Deno.serve(async (req) => {
     const itemIds: string[] = Array.isArray(body?.item_ids) ? body.item_ids : [];
     const styleNote: string | null = typeof body?.style_note === "string" && body.style_note.trim()
       ? body.style_note.trim() : null;
+    const instructions: string | null = typeof body?.instructions === "string" && body.instructions.trim()
+      ? body.instructions.trim() : null;
+    const sourceNotes: Record<string, string> = (body?.source_notes && typeof body.source_notes === "object")
+      ? body.source_notes : {};
     const targetWords: "short" | "medium" | "long" =
       body?.target_words === "short" ? "short" :
       body?.target_words === "long" ? "long" : "medium";
@@ -215,12 +219,14 @@ Deno.serve(async (req) => {
 
     const sourceBlock = (items as ItemRow[])
       .map((it, idx) => {
+        const note = sourceNotes[`db:${it.id}`];
         const lines = [
           `[#${idx + 1}] ${it.title_he}`,
           it.summary_he ? `סיכום: ${it.summary_he}` : null,
           it.why_it_matters ? `למה זה חשוב: ${it.why_it_matters}` : null,
           it.tags_ai?.length ? `תגיות: ${it.tags_ai.join(", ")}` : null,
           it.url ? `מקור: ${it.url}` : null,
+          note ? `הנחייה ספציפית למקור זה: ${note}` : null,
         ].filter(Boolean);
         return lines.join("\n");
       })
@@ -230,7 +236,8 @@ Deno.serve(async (req) => {
       items.length > 0
         ? `להלן ${items.length} פריטי תוכן. הפק מהם מאמר אחד קוהרנטי לפי ההנחיות.`
         : `הפק מאמר קוהרנטי מהמידע הבא מהרשת, לפי ההנחיות.`,
-      styleNote ? `\nהערת סגנון מהמשתמש:\n${styleNote}` : "",
+      instructions ? `\nהנחיות המשתמש לכתיבת המאמר:\n${instructions}` : "",
+      styleNote ? `\nהערת סגנון:\n${styleNote}` : "",
       webContext ? `\n--- מידע מהרשת ---\n${webContext}` : "",
       items.length > 0 ? `\n--- פריטי המקור ---\n${sourceBlock}` : "",
     ].join("\n");
