@@ -342,11 +342,12 @@ const Drafts = () => {
                   {/* Generate version dropdown */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button size="sm" variant="ghost" className="gap-1 h-8" disabled={generatingId === d.id}>
+                      <Button size="sm" variant="outline" className="gap-1.5 h-8 border-accent/30 text-accent hover:bg-accent/10" disabled={generatingId === d.id}>
                         {generatingId === d.id
                           ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          : <Sparkles className="h-3.5 w-3.5 text-accent" />}
-                        <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                          : <Sparkles className="h-3.5 w-3.5" />}
+                        {generatingId === d.id ? "יוצר..." : "צור גרסה"}
+                        <ChevronDown className="h-3 w-3" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className="w-52">
