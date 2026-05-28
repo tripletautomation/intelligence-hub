@@ -6,10 +6,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   FileText, Sparkles, Loader2, Mail, Trash2, Pencil,
-  CheckCircle2, Archive as ArchiveIcon, RotateCcw, User,
+  CheckCircle2, Archive as ArchiveIcon, RotateCcw, User, ChevronDown,
+  Linkedin, Globe, Globe2,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuSeparator, DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
@@ -63,12 +68,21 @@ const statusLabel: Record<DraftStatus, string> = {
   archived: "בארכיון",
 };
 
+type GenerateTarget = "linkedin" | "blog_he" | "blog_en";
+
+const GENERATE_OPTIONS: { id: GenerateTarget; label: string; icon: React.ReactNode }[] = [
+  { id: "linkedin", label: "פוסט LinkedIn (עברית)", icon: <Linkedin className="h-3.5 w-3.5" /> },
+  { id: "blog_he",  label: "מאמר בלוג — עברית",    icon: <Globe className="h-3.5 w-3.5" /> },
+  { id: "blog_en",  label: "מאמר בלוג — English",   icon: <Globe2 className="h-3.5 w-3.5" /> },
+];
+
 const Drafts = () => {
   const { user } = useAuth();
   const nav = useNavigate();
   const qc = useQueryClient();
   const [tab, setTab] = useState<DraftStatus>("draft");
   const [contentFilter, setContentFilter] = useState<ContentType | "all">("all");
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
 
   const { data: rows = [], isLoading } = useQuery({
     enabled: !!user,
@@ -145,6 +159,63 @@ const Drafts = () => {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const generateVersion = async (draft: DraftRow, target: GenerateTarget) => {
+    setGeneratingId(draft.id);
+    try {
+      // Load full draft (body + instructions) for context
+      const { data: full } = await (supabase as any)
+        .from("article_drafts")
+        .select("body,intro,closing,instructions,source_notes")
+        .eq("id", draft.id)
+        .maybeSingle();
+
+      const existingText = [full?.intro, full?.body, full?.closing]
+        .filter((s: string | null) => s?.trim())
+        .join("\n\n");
+
+      let newDraftId: string | null = null;
+
+      if (target === "linkedin") {
+        const { data, error } = await supabase.functions.invoke("generate-article", {
+          body: {
+            item_ids: draft.source_item_ids,
+            instructions: full?.instructions || undefined,
+            source_notes: full?.source_notes || undefined,
+            web_context: existingText
+              ? `תוכן המאמר המקורי לייחוס:\n${existingText}`
+              : undefined,
+            target_words: "medium",
+          },
+        });
+        if (error) throw new Error(error.message);
+        newDraftId = (data as any)?.draft_id;
+      } else {
+        const { data, error } = await supabase.functions.invoke("generate-blog-post", {
+          body: {
+            item_ids: draft.source_item_ids,
+            language: target === "blog_en" ? "en" : "he",
+            instructions: full?.instructions || undefined,
+            source_notes: full?.source_notes || undefined,
+            web_context: existingText
+              ? `Original article content for reference:\n${existingText}`
+              : undefined,
+          },
+        });
+        if (error) throw new Error(error.message);
+        newDraftId = (data as any)?.draft_id;
+      }
+
+      if (!newDraftId) throw new Error("לא התקבל מזהה טיוטה");
+      qc.invalidateQueries({ queryKey: ["article_drafts"] });
+      toast.success("גרסה חדשה נוצרה!");
+      nav(`/drafts/${newDraftId}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה ביצירת גרסה");
+    } finally {
+      setGeneratingId(null);
+    }
+  };
 
   return (
     <AppLayout>
@@ -268,6 +339,30 @@ const Drafts = () => {
                       <Mail className="h-3.5 w-3.5" /> שלח
                     </a>
                   </Button>
+                  {/* Generate version dropdown */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" variant="ghost" className="gap-1 h-8" disabled={generatingId === d.id}>
+                        {generatingId === d.id
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          : <Sparkles className="h-3.5 w-3.5 text-accent" />}
+                        <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-52">
+                      <DropdownMenuLabel className="text-xs text-muted-foreground">צור גרסה חדשה</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {GENERATE_OPTIONS.map((opt) => (
+                        <DropdownMenuItem
+                          key={opt.id}
+                          className="gap-2 cursor-pointer text-sm"
+                          onClick={() => generateVersion(d, opt.id)}
+                        >
+                          {opt.icon} {opt.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   {d.status !== "approved" && (
                     <Button
                       size="sm" variant="ghost"
