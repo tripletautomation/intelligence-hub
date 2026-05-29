@@ -16,7 +16,7 @@ import { SourceManager, type SourceManagerHandle } from "@/components/SourceMana
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, Globe2, Loader2, Rss, FileText, CalendarDays, Key, PenLine, CheckCircle2, Circle, Layers, Plus, Trash2, GripVertical } from "lucide-react";
+import { Search, Globe2, Loader2, Rss, FileText, CalendarDays, Key, PenLine, CheckCircle2, Circle, Layers, Plus, Trash2, GripVertical, Sparkles, PlayCircle } from "lucide-react";
 import { UserAccessManager } from "@/components/UserAccessManager";
 import { ChevronDown, AlertTriangle, Activity, BrainCircuit, Save } from "lucide-react";
 import type { TopicCategory } from "@/lib/types";
@@ -695,6 +695,8 @@ const Admin = () => {
   const [runningPageEvents, setRunningPageEvents] = useState(false);
   const [runningPageResearch, setRunningPageResearch] = useState(false);
   const [hideSeed, setHideSeed] = useState(() => localStorage.getItem("hideSeed") === "1");
+  const [weeklyRunning, setWeeklyRunning] = useState(false);
+  const [weeklyResult, setWeeklyResult] = useState<{ drafts: number; errors?: string[] } | null>(null);
 
   // Source Discovery
   const sourceManagerRef = useRef<SourceManagerHandle>(null);
@@ -846,6 +848,70 @@ const Admin = () => {
         <WritingStyleSection />
         <PromptTemplatesSection />
         <TopicCategoriesSection />
+
+        {/* ── Auto-generate weekly ───────────────────────────────────────────── */}
+        <div className="surface-card p-6 space-y-4">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-accent" />
+            <div>
+              <h2 className="text-lg font-bold text-primary">יצירה שבועית אוטומטית</h2>
+              <p className="text-sm text-muted-foreground">
+                מייצר טיוטות מאמרים מהידיעות של 7 הימים האחרונים. רץ אוטומטית כל שישי 07:00.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-border p-3 bg-muted/30 text-sm text-muted-foreground space-y-1">
+            <p>📦 <strong>מה נוצר בכל ריצה:</strong></p>
+            <ul className="list-disc list-inside space-y-0.5 text-xs pr-2">
+              <li>מאמר שבועי מקיף — בלוג עברית + אנגלית + LinkedIn</li>
+              <li>2-3 מאמרים ממוקדים לפי נושא — LinkedIn + פוסטים + image prompt</li>
+            </ul>
+            <p className="text-xs pt-1">כל הטיוטות נשמרות בסטטוס "טיוטה" ומחכות לאישורך בדף המאמרים.</p>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <Button
+              onClick={async () => {
+                setWeeklyRunning(true);
+                setWeeklyResult(null);
+                try {
+                  const { data, error } = await supabase.functions.invoke("auto-generate-weekly", {
+                    body: { days_back: 7 },
+                  });
+                  if (error) throw new Error(error.message);
+                  const d = data as any;
+                  setWeeklyResult({ drafts: d?.drafts_created?.length ?? 0, errors: d?.errors });
+                  toast.success(`${d?.drafts_created?.length ?? 0} טיוטות נוצרו בהצלחה`);
+                  qc.invalidateQueries({ queryKey: ["article_drafts"] });
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "שגיאה");
+                } finally {
+                  setWeeklyRunning(false);
+                }
+              }}
+              disabled={weeklyRunning}
+              className="gap-2"
+            >
+              {weeklyRunning
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> מייצר טיוטות...</>
+                : <><PlayCircle className="h-4 w-4" /> הפעל עכשיו</>}
+            </Button>
+            <span className="text-xs text-muted-foreground">הפעלה ידנית — לא משנה את לוח הזמנים האוטומטי</span>
+          </div>
+
+          {weeklyResult && (
+            <div className={cn(
+              "rounded-md p-3 text-sm",
+              weeklyResult.errors?.length ? "bg-yellow-50 border border-yellow-200 text-yellow-800" : "bg-emerald-50 border border-emerald-200 text-emerald-800"
+            )}>
+              <p className="font-medium">נוצרו {weeklyResult.drafts} טיוטות — ממתינות לאישורך בדף המאמרים</p>
+              {weeklyResult.errors?.map((e, i) => (
+                <p key={i} className="text-xs mt-1 opacity-70">{e}</p>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="surface-card p-6">
           <h2 className="text-lg font-bold text-primary mb-1">מצב נתונים</h2>
