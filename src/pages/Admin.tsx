@@ -927,6 +927,29 @@ const Admin = () => {
             >
               בדוק (dry run)
             </Button>
+            <Button
+              variant="ghost" size="sm"
+              onClick={async () => {
+                // Raw fetch to see the actual HTTP response
+                const { data: { session } } = await supabase.auth.getSession();
+                const res = await fetch(
+                  `https://iwhxpppfaegqvjneghnk.supabase.co/functions/v1/auto-generate-weekly`,
+                  {
+                    method: "POST",
+                    headers: {
+                      "Authorization": `Bearer ${session?.access_token}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ dry_run: true, days_back: 7 }),
+                  }
+                );
+                const text = await res.text();
+                setWeeklyResult({ drafts: 0, errors: [`HTTP ${res.status}: ${text}`] });
+              }}
+              className="gap-1.5 text-xs h-8"
+            >
+              Raw test
+            </Button>
           </div>
 
           {weeklyResult && (
