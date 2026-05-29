@@ -28,6 +28,8 @@ import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface WebSourceData { title: string; url: string; snippet?: string; note?: string; }
+
 interface Draft {
   id: string;
   title: string;
@@ -36,6 +38,7 @@ interface Draft {
   closing: string | null;
   instructions: string | null;
   source_notes: Record<string, string> | null;
+  web_sources: WebSourceData[] | null;
   source_item_ids: string[];
   style_note: string | null;
   content_type: string | null;
@@ -208,22 +211,35 @@ const DraftDetail = () => {
     }
   }, [draft]);
 
-  // Initialize activeSources with DB items + saved source_notes
+  // Initialize activeSources with DB items + web_sources from draft
   useEffect(() => {
-    if (sourceItems.length > 0 && !sourcesInitialized) {
-      const savedNotes: Record<string, string> = (draft?.source_notes as Record<string, string>) ?? {};
-      setActiveSources(
-        sourceItems.map((s) => ({
-          kind: "db" as const,
-          id: s.id,
-          title: s.title_he,
-          url: s.url,
-          note: savedNotes[`db:${s.id}`] ?? "",
-        }))
-      );
-      setSourcesInitialized(true);
-    }
-  }, [sourceItems, sourcesInitialized, draft?.source_notes]);
+    if (sourcesInitialized || !draft) return;
+    const hasDbItems = (draft.source_item_ids?.length ?? 0) > 0;
+    if (hasDbItems && sourceItems.length === 0) return; // wait for DB items query
+
+    const savedNotes: Record<string, string> = (draft.source_notes as Record<string, string>) ?? {};
+    const webSourcesData: WebSourceData[] = (draft.web_sources as WebSourceData[]) ?? [];
+
+    const dbSources = sourceItems.map((s) => ({
+      kind: "db" as const,
+      id: s.id,
+      title: s.title_he,
+      url: s.url,
+      note: savedNotes[`db:${s.id}`] ?? "",
+    }));
+
+    const webSources = webSourcesData.map((s) => ({
+      kind: "web" as const,
+      title: s.title,
+      snippet: s.snippet ?? "",
+      url: s.url,
+      relevance: 0,
+      note: s.note ?? savedNotes[`web:${s.url}`] ?? "",
+    }));
+
+    setActiveSources([...dbSources, ...webSources]);
+    setSourcesInitialized(true);
+  }, [draft, sourceItems, sourcesInitialized]);
 
   // ── Mutations ────────────────────────────────────────────────────────────────
 
@@ -234,6 +250,14 @@ const DraftDetail = () => {
     });
     return notes;
   };
+
+  const buildWebSources = (): WebSourceData[] =>
+    activeSources
+      .filter((s) => s.kind === "web")
+      .map((s) => {
+        const ws = s as Extract<UnifiedSource, { kind: "web" }>;
+        return { title: ws.title, url: ws.url, snippet: ws.snippet, note: ws.note };
+      });
 
   const save = useMutation({
     mutationFn: async () => {
@@ -246,6 +270,7 @@ const DraftDetail = () => {
           closing: "",
           instructions: form.instructions || null,
           source_notes: buildSourceNotes(),
+          web_sources: buildWebSources(),
         })
         .eq("id", id);
       if (error) throw error;
