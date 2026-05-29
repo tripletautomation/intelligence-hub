@@ -879,13 +879,20 @@ const Admin = () => {
                   const { data, error } = await supabase.functions.invoke("auto-generate-weekly", {
                     body: { days_back: 7 },
                   });
-                  if (error) throw new Error(error.message);
+                  if (error) {
+                    // Try to extract the real error body
+                    let detail = error.message;
+                    try { detail = JSON.stringify((error as any).context ?? error); } catch {}
+                    throw new Error(detail);
+                  }
                   const d = data as any;
                   setWeeklyResult({ drafts: d?.drafts_created?.length ?? 0, errors: d?.errors });
                   toast.success(`${d?.drafts_created?.length ?? 0} טיוטות נוצרו בהצלחה`);
                   qc.invalidateQueries({ queryKey: ["article_drafts"] });
                 } catch (e) {
-                  toast.error(e instanceof Error ? e.message : "שגיאה");
+                  const msg = e instanceof Error ? e.message : "שגיאה";
+                  setWeeklyResult({ drafts: 0, errors: [msg] });
+                  toast.error("שגיאה — ראי פרטים בתיבה מטה");
                 } finally {
                   setWeeklyRunning(false);
                 }
@@ -897,7 +904,29 @@ const Admin = () => {
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> מייצר טיוטות...</>
                 : <><PlayCircle className="h-4 w-4" /> הפעל עכשיו</>}
             </Button>
-            <span className="text-xs text-muted-foreground">הפעלה ידנית — לא משנה את לוח הזמנים האוטומטי</span>
+            <Button
+              variant="outline" size="sm"
+              onClick={async () => {
+                setWeeklyRunning(true);
+                setWeeklyResult(null);
+                try {
+                  const { data, error } = await supabase.functions.invoke("auto-generate-weekly", {
+                    body: { days_back: 7, dry_run: true },
+                  });
+                  if (error) throw new Error(JSON.stringify((error as any).context ?? error.message));
+                  const d = data as any;
+                  setWeeklyResult({ drafts: 0, errors: [`Dry run: ${JSON.stringify(d)}`] });
+                } catch (e) {
+                  setWeeklyResult({ drafts: 0, errors: [e instanceof Error ? e.message : "שגיאה"] });
+                } finally {
+                  setWeeklyRunning(false);
+                }
+              }}
+              disabled={weeklyRunning}
+              className="gap-1.5 text-xs h-8"
+            >
+              בדוק (dry run)
+            </Button>
           </div>
 
           {weeklyResult && (
