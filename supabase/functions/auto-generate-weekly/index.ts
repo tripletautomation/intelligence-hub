@@ -45,11 +45,10 @@ Deno.serve(async (req) => {
 
     const since = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
 
-    // Fetch items from the past N days (not hidden)
+    // Fetch items from the past N days
     const { data: items, error: itemsErr } = await admin
       .from("items")
       .select("id,title_he,summary_he,why_it_matters,url,tags_ai,item_type,region,created_at")
-      .not("hidden", "eq", true)
       .gte("created_at", since)
       .order("created_at", { ascending: false })
       .limit(30);
