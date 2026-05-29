@@ -36,22 +36,28 @@ Deno.serve(async (req) => {
     const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
+    // Forward the caller's JWT so inner functions (generate-article etc.) can auth
+    const authHeader = req.headers.get("Authorization") ?? `Bearer ${SERVICE_KEY}`;
+
     const body = await req.json().catch(() => ({}));
-    const daysBack: number = body?.days_back ?? 7;
+    const daysBack: number = typeof body?.days_back === "number" ? body.days_back : 7;
     const dryRun: boolean = body?.dry_run === true;
 
     const since = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
 
-    // Fetch items from the past N days
+    // Fetch items from the past N days (not hidden)
     const { data: items, error: itemsErr } = await admin
       .from("items")
       .select("id,title_he,summary_he,why_it_matters,url,tags_ai,item_type,region,created_at")
-      .eq("hidden", false)
+      .not("hidden", "eq", true)
       .gte("created_at", since)
       .order("created_at", { ascending: false })
       .limit(30);
 
-    if (itemsErr) return json({ error: itemsErr.message }, 500);
+    if (itemsErr) {
+      console.error("items query error:", itemsErr);
+      return json({ error: itemsErr.message }, 500);
+    }
     if (!items || items.length === 0) return json({ message: "אין ידיעות חדשות לשבוע זה", drafts_created: [] });
 
     const allItems = items as ItemRow[];
@@ -70,19 +76,19 @@ Deno.serve(async (req) => {
       .slice(0, 3)
       .filter(([, groupItems]) => groupItems.length >= 1);
 
-    // Helper — calls another edge function with service role auth
+    // Helper — calls another edge function, forwarding the caller's JWT
     const invokeFunction = async (fnName: string, payload: Record<string, unknown>) => {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/${fnName}`, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${SERVICE_KEY}`,
+          "Authorization": authHeader,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(`${fnName} failed: ${res.status} ${text}`);
+        throw new Error(`${fnName} failed (${res.status}): ${text.slice(0, 200)}`);
       }
       return res.json();
     };
