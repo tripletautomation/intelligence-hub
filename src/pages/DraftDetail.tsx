@@ -211,14 +211,15 @@ const DraftDetail = () => {
     }
   }, [draft]);
 
-  // Initialize activeSources with DB items + web_sources from draft
+  // Initialize activeSources with DB items + web_sources from draft.
+  // Runs once when both draft and (if needed) sourceItems are ready.
   useEffect(() => {
     if (sourcesInitialized || !draft) return;
     const hasDbItems = (draft.source_item_ids?.length ?? 0) > 0;
-    if (hasDbItems && sourceItems.length === 0) return; // wait for DB items query
+    if (hasDbItems && sourceItems.length === 0) return; // wait for DB items
 
     const savedNotes: Record<string, string> = (draft.source_notes as Record<string, string>) ?? {};
-    const webSourcesData: WebSourceData[] = (draft.web_sources as WebSourceData[]) ?? [];
+    const webSourcesData: WebSourceData[] = Array.isArray(draft.web_sources) ? (draft.web_sources as WebSourceData[]) : [];
 
     const dbSources = sourceItems.map((s) => ({
       kind: "db" as const,
@@ -240,6 +241,28 @@ const DraftDetail = () => {
     setActiveSources([...dbSources, ...webSources]);
     setSourcesInitialized(true);
   }, [draft, sourceItems, sourcesInitialized]);
+
+  // If draft refetches and now has web_sources (e.g. just created), merge them in
+  useEffect(() => {
+    if (!sourcesInitialized || !draft) return;
+    const webSourcesData: WebSourceData[] = Array.isArray(draft.web_sources) ? (draft.web_sources as WebSourceData[]) : [];
+    if (webSourcesData.length === 0) return;
+
+    setActiveSources((prev) => {
+      const existingWebUrls = new Set(prev.filter((s) => s.kind === "web").map((s) => s.url));
+      const newOnes = webSourcesData
+        .filter((s) => !existingWebUrls.has(s.url))
+        .map((s) => ({
+          kind: "web" as const,
+          title: s.title,
+          snippet: s.snippet ?? "",
+          url: s.url,
+          relevance: 0,
+          note: s.note ?? "",
+        }));
+      return newOnes.length > 0 ? [...prev, ...newOnes] : prev;
+    });
+  }, [draft?.web_sources, sourcesInitialized]);
 
   // ── Mutations ────────────────────────────────────────────────────────────────
 

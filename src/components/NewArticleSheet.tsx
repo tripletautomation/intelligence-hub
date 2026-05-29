@@ -154,14 +154,18 @@ export const NewArticleSheet = ({ open, onOpenChange }: Props) => {
       if (!draftId) throw new Error("לא התקבל מזהה טיוטה");
 
       // Save web sources to the draft so DraftDetail can display them
-      await supabase.from("article_drafts" as any).update({
-        web_sources: chosenSources.map((s) => ({
-          title: s.title,
-          url: s.url,
-          snippet: s.snippet,
-          note: s.note,
-        })),
-      }).eq("id", draftId);
+      const { error: wsErr } = await (supabase as any)
+        .from("article_drafts")
+        .update({
+          web_sources: chosenSources.map((s) => ({
+            title: s.title,
+            url: s.url,
+            snippet: s.snippet,
+            note: s.note,
+          })),
+        })
+        .eq("id", draftId);
+      if (wsErr) console.error("web_sources save failed:", wsErr);
 
       qc.invalidateQueries({ queryKey: ["article_drafts"] });
       toast.success("המאמר נוצר!");
