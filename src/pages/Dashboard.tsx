@@ -5,8 +5,9 @@ import { AppLayout } from "@/components/AppLayout";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDrawer } from "@/components/ItemDrawer";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Search, LayoutList, Tag, ChevronDown, ChevronUp, Zap, Calendar, Clock, Archive, CheckSquare, X, Loader2 } from "lucide-react";
+import { RefreshCw, Search, LayoutList, Tag, ChevronDown, ChevronUp, Zap, Calendar, Clock, Archive, CheckSquare, X, Loader2, MessageSquare } from "lucide-react";
 import { NewsSearchPanel } from "@/components/NewsSearchPanel";
+import { ChatPanel } from "@/components/ChatPanel";
 import { supabase } from "@/integrations/supabase/client";
 import {
   useItems,
@@ -93,6 +94,7 @@ const Dashboard = () => {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [generating, setGenerating] = useState<GenerateType | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
 
   const toggleBucket = (bucket: string) =>
     setCollapsedBuckets((prev) => {
@@ -290,6 +292,16 @@ const Dashboard = () => {
 
   return (
     <AppLayout search={search} onSearchChange={setSearch}>
+      {/* Chat panel — fixed on right side */}
+      {chatOpen && (
+        <div className="fixed right-0 top-[112px] h-[calc(100vh-112px)] z-30 shadow-2xl border-r border-border">
+          <ChatPanel onClose={() => setChatOpen(false)} />
+        </div>
+      )}
+
+      {/* Main content — shrinks when chat open */}
+      <div className={cn("transition-[margin] duration-200", chatOpen && "mr-[380px]")}>
+
       {/* Top bar */}
       <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
         <div className="text-xs text-muted-foreground">
@@ -304,6 +316,15 @@ const Dashboard = () => {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant={chatOpen ? "secondary" : "outline"}
+            onClick={() => setChatOpen((v) => !v)}
+            className="gap-2 border-accent/30 text-accent hover:bg-accent/10"
+          >
+            <MessageSquare className="h-4 w-4" />
+            Assistant
+          </Button>
           <Button
             size="sm"
             variant={selectMode ? "secondary" : "outline"}
@@ -490,6 +511,8 @@ const Dashboard = () => {
           </div>
         </div>
       )}
+
+      </div> {/* end main content wrapper */}
     </AppLayout>
   );
 };
