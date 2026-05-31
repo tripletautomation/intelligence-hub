@@ -120,27 +120,31 @@ export const ChatPanel = ({ onClose }: Props) => {
             .join("\n\n")
         : undefined;
 
+      const webCtx = action.web_context || conversationContext || undefined;
+      const instructions = action.instructions || undefined;
+      const itemIds = action.item_ids ?? [];
+
+      console.log("createDraft payload:", { content_type: action.content_type, itemIds, hasWebCtx: !!webCtx, hasInstructions: !!instructions });
+
       if (action.content_type === "linkedin") {
         const { data, error } = await supabase.functions.invoke("generate-article", {
-          body: {
-            item_ids: action.item_ids ?? [],
-            web_context: action.web_context || conversationContext || undefined,
-            instructions: action.instructions || undefined,
-            target_words: "medium",
-          },
+          body: { item_ids: itemIds, web_context: webCtx, instructions, target_words: "medium" },
         });
-        if (error) throw new Error(error.message);
+        if (error) {
+          const detail = await (error as any).context?.text?.() ?? error.message;
+          throw new Error(detail);
+        }
+        if ((data as any)?.error) throw new Error((data as any).error);
         draftId = (data as any)?.draft_id;
       } else {
         const { data, error } = await supabase.functions.invoke("generate-blog-post", {
-          body: {
-            item_ids: action.item_ids ?? [],
-            language: action.content_type === "blog_en" ? "en" : "he",
-            web_context: action.web_context || conversationContext || undefined,
-            instructions: action.instructions || undefined,
-          },
+          body: { item_ids: itemIds, language: action.content_type === "blog_en" ? "en" : "he", web_context: webCtx, instructions },
         });
-        if (error) throw new Error(error.message);
+        if (error) {
+          const detail = await (error as any).context?.text?.() ?? error.message;
+          throw new Error(detail);
+        }
+        if ((data as any)?.error) throw new Error((data as any).error);
         draftId = (data as any)?.draft_id;
       }
 
@@ -149,7 +153,9 @@ export const ChatPanel = ({ onClose }: Props) => {
       toast.success("הטיוטה נוצרה!");
       nav(`/drafts/${draftId}`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "שגיאה ביצירת טיוטה");
+      const errMsg = e instanceof Error ? e.message : "שגיאה ביצירת טיוטה";
+      console.error("createDraft error:", errMsg);
+      toast.error(errMsg.slice(0, 200));
       setMessages((prev) => prev.map((m, i) => i === msgIdx ? { ...m, creating: false } : m));
     }
   };
