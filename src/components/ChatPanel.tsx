@@ -50,7 +50,7 @@ export const ChatPanel = ({ onClose }: Props) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: "שלום! אני Assistant של Triple T. אני יודע לסכם ידיעות, לענות על שאלות, לחפש מידע ברשת, וליצור טיוטות מאמרים ופוסטים. מה תרצי לעשות?",
+      content: "שלום! אני Assistant של Triple T. ניתן לשאול שאלות על הידיעות שנאספו, לבקש סיכום, לחפש מידע ברשת, וליצור טיוטות מאמרים ופוסטים. במה אוכל לעזור?",
     },
   ]);
   const [input, setInput] = useState("");
@@ -109,11 +109,22 @@ export const ChatPanel = ({ onClose }: Props) => {
       const { action } = msg;
       let draftId: string | null = null;
 
+      // Build web_context from conversation if no specific sources were given
+      const hasItems = (action.item_ids ?? []).length > 0;
+      const hasWebContext = !!action.web_context;
+      const conversationContext = (!hasItems && !hasWebContext)
+        ? messages
+            .slice(Math.max(0, msgIdx - 6), msgIdx + 1)
+            .filter((m) => m.role === "assistant")
+            .map((m) => m.content)
+            .join("\n\n")
+        : undefined;
+
       if (action.content_type === "linkedin") {
         const { data, error } = await supabase.functions.invoke("generate-article", {
           body: {
             item_ids: action.item_ids ?? [],
-            web_context: action.web_context || undefined,
+            web_context: action.web_context || conversationContext || undefined,
             instructions: action.instructions || undefined,
             target_words: "medium",
           },
@@ -125,7 +136,7 @@ export const ChatPanel = ({ onClose }: Props) => {
           body: {
             item_ids: action.item_ids ?? [],
             language: action.content_type === "blog_en" ? "en" : "he",
-            web_context: action.web_context || undefined,
+            web_context: action.web_context || conversationContext || undefined,
             instructions: action.instructions || undefined,
           },
         });
@@ -250,7 +261,7 @@ export const ChatPanel = ({ onClose }: Props) => {
                 sendMessage(input);
               }
             }}
-            placeholder="שאלי שאלה, בקשי סיכום, או כתבי 'צרי לי פוסט על AI'..."
+            placeholder="שאלה, בקשה לסיכום, 'צור לי פוסט על X'..."
             rows={2}
             className="text-sm resize-none flex-1"
             dir="rtl"
@@ -265,7 +276,7 @@ export const ChatPanel = ({ onClose }: Props) => {
             <Send className="h-4 w-4" />
           </Button>
         </div>
-        <p className="text-[10px] text-muted-foreground mt-1.5 text-center">Enter לשליחה · Shift+Enter לשורה חדשה</p>
+        <p className="text-[10px] text-muted-foreground mt-1.5 text-center">Enter לשליחה · Shift+Enter לירידת שורה</p>
       </div>
     </div>
   );
