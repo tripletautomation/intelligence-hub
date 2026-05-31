@@ -94,7 +94,7 @@ const Dashboard = () => {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [generating, setGenerating] = useState<GenerateType | null>(null);
-  const [chatOpen, setChatOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(true);
 
   const toggleBucket = (bucket: string) =>
     setCollapsedBuckets((prev) => {
@@ -318,12 +318,12 @@ const Dashboard = () => {
         <div className="flex items-center gap-2">
           <Button
             size="sm"
-            variant={chatOpen ? "secondary" : "outline"}
+            variant={chatOpen ? "default" : "outline"}
             onClick={() => setChatOpen((v) => !v)}
-            className="gap-2 border-accent/30 text-accent hover:bg-accent/10"
+            className={cn("gap-2", !chatOpen && "border-accent/50 text-accent hover:bg-accent/10")}
           >
             <MessageSquare className="h-4 w-4" />
-            Assistant
+            עוזר אישי
           </Button>
           <Button
             size="sm"

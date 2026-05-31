@@ -160,7 +160,7 @@ export const ChatPanel = ({ onClose }: Props) => {
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-accent" />
-          <span className="text-sm font-semibold text-primary">Assistant</span>
+          <span className="text-sm font-semibold text-primary">עוזר אישי</span>
         </div>
         <Button variant="ghost" size="sm" onClick={onClose} className="h-7 w-7 p-0">
           <X className="h-4 w-4" />
