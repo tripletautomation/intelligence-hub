@@ -38,7 +38,7 @@ const TOOLS_ANTHROPIC = [
       type: "object",
       properties: {
         content_type: { type: "string", enum: ["linkedin", "blog_he", "blog_en"], description: "Type of content to create" },
-        item_ids: { type: "array", items: { type: "string" }, description: "IDs of the relevant news items to base the content on" },
+        item_ids: { type: "array", items: { type: "string" }, description: "FULL UUID values (e.g. 'a1b2c3d4-...') of the relevant items from the news list above. Use the exact UUID after 'ID:' — NOT the index number like [1] or [24]." },
         web_context: { type: "string", description: "Additional web search context if web search was performed" },
         instructions: { type: "string", description: "Specific instructions for the content — angle, tone, focus" },
         explanation: { type: "string", description: "Brief explanation to show the user why these items were chosen" },

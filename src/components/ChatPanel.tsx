@@ -122,7 +122,8 @@ export const ChatPanel = ({ onClose }: Props) => {
 
       const webCtx = action.web_context || conversationContext || undefined;
       const instructions = action.instructions || undefined;
-      const itemIds = action.item_ids ?? [];
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const itemIds = (action.item_ids ?? []).filter((id) => UUID_RE.test(id));
 
       console.log("createDraft payload:", { content_type: action.content_type, itemIds, hasWebCtx: !!webCtx, hasInstructions: !!instructions });
 
