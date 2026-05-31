@@ -20,7 +20,7 @@ import {
   ArrowRight, Loader2, Save, Trash2, Mail, Copy, Check,
   Wand2, Maximize2, Minimize2, RefreshCw, Sparkles,
   Globe, Plus, X, Linkedin, Image,
-  Share2, ChevronDown, ChevronUp, Lightbulb,
+  Share2, ChevronDown, ChevronUp, Lightbulb, ExternalLink, Eye, Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { buildEmailBodyHtml } from "@/lib/articleHtml";
@@ -86,6 +86,28 @@ function sourceKey(src: UnifiedSource): string {
   return src.kind === "db" ? `db:${src.id}` : `web:${src.url}`;
 }
 
+function renderMarkdown(md: string, isLinkedIn = false): string {
+  if (isLinkedIn) {
+    const escaped = md.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return escaped.split(/\n\n+/).map((p) => `<p style="margin-bottom:0.8em">${p.replace(/\n/g, "<br>")}</p>`).join("");
+  }
+  const escaped = md.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const withHeadings = escaped
+    .replace(/^## (.+)$/gm, "\x00h2\x01$1\x00/h2\x01")
+    .replace(/^# (.+)$/gm, "\x00h1\x01$1\x00/h1\x01");
+  const withInline = withHeadings
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>");
+  return withInline
+    .split(/\n\n+/)
+    .map((block) => {
+      if (block.startsWith("\x00h1\x01")) return `<h1 style="font-size:1.4em;font-weight:700;margin:1.2em 0 0.4em">${block.replace(/\x00\/?h1\x01/g, "")}</h1>`;
+      if (block.startsWith("\x00h2\x01")) return `<h2 style="font-size:1.15em;font-weight:600;margin:1em 0 0.3em">${block.replace(/\x00\/?h2\x01/g, "")}</h2>`;
+      return `<p style="margin-bottom:0.8em;line-height:1.7">${block.replace(/\n/g, "<br>")}</p>`;
+    })
+    .join("\n");
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const DraftDetail = () => {
@@ -95,6 +117,7 @@ const DraftDetail = () => {
   const qc = useQueryClient();
 
   const [mainTab, setMainTab] = useState<MainTab>("editor");
+  const [editorView, setEditorView] = useState<"edit" | "preview">("edit");
   const [copied, setCopied] = useState(false);
   const [activeTone, setActiveTone] = useState<Tone>("formal");
   const [refineLoading, setRefineLoading] = useState(false);
@@ -559,6 +582,20 @@ const DraftDetail = () => {
           <ArrowRight className="h-4 w-4" /> כל הטיוטות
         </Button>
         <div className="flex items-center gap-2 flex-wrap">
+          {draft?.content_type === "linkedin" && (
+            <Button
+              size="sm"
+              className="gap-1.5 bg-[#0077b5] hover:bg-[#005885] text-white"
+              onClick={() => {
+                navigator.clipboard.writeText(form.body?.trim() ?? "").catch(() => {});
+                window.open("https://www.linkedin.com/feed/", "_blank");
+                toast.success("הטקסט הועתק — הדבק בפוסט החדש ב-LinkedIn");
+              }}
+            >
+              <Linkedin className="h-4 w-4" />
+              פרסם ב-LinkedIn
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={onCopy} className="gap-1.5">
             {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
             {copied ? "הועתק" : "העתק"}
@@ -701,15 +738,41 @@ const DraftDetail = () => {
 
               {/* Unified content editor */}
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">תוכן המאמר</Label>
-                <AutoResizeTextarea
-                  id="body"
-                  value={form.body ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
-                  minRows={20}
-                  dir={textDir}
-                  className={cn("text-sm leading-relaxed", textAlign)}
-                />
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">תוכן המאמר</Label>
+                  <div className="flex rounded-md border border-border overflow-hidden text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setEditorView("edit")}
+                      className={cn("flex items-center gap-1 px-2.5 py-1 transition-colors", editorView === "edit" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground")}
+                    >
+                      <Pencil className="h-3 w-3" /> עריכה
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditorView("preview")}
+                      className={cn("flex items-center gap-1 px-2.5 py-1 transition-colors border-r border-border", editorView === "preview" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground")}
+                    >
+                      <Eye className="h-3 w-3" /> תצוגה מקדימה
+                    </button>
+                  </div>
+                </div>
+                {editorView === "edit" ? (
+                  <AutoResizeTextarea
+                    id="body"
+                    value={form.body ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
+                    minRows={20}
+                    dir={textDir}
+                    className={cn("text-sm leading-relaxed", textAlign)}
+                  />
+                ) : (
+                  <div
+                    className={cn("min-h-[420px] p-5 rounded-md border border-border bg-muted/20 text-sm overflow-auto", textAlign)}
+                    dir={textDir}
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(form.body ?? "", draft?.content_type === "linkedin") }}
+                  />
+                )}
               </div>
 
               {/* Source links */}

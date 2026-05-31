@@ -34,39 +34,47 @@ Senior IT decision-makers, CTOs, infrastructure managers at large Israeli enterp
 
 ## Article structure (required):
 
+### Title:
+Specific, declarative, data-driven. Not: "Current Trends in AI Infrastructure". Yes: "Why 70% of AI Projects Fail Before They Start" / "The Question Your Data Center Vendor Won't Ask You".
+
 ### Opening (2-3 paragraphs):
-Start with a hook — choose one:
+Start with a hook — choose one approach and commit:
 - A sharp question that cuts to the real problem
 - A specific data point that challenges conventional wisdom
 - A concrete scenario that makes the stakes real
 - A counterintuitive observation
-Never start with: "In today's rapidly evolving landscape", "Technology is transforming...", "As we navigate..."
+Never start with: "In today's rapidly evolving landscape", "Technology is transforming...", "As we navigate...", "It's no secret that..."
 
-### Body — 3-4 sections with ## H2 headings:
-Each section must include:
-1. A clear thesis for that section
-2. Evidence and analysis from the sources
-3. The business/operational implication for large enterprises
-4. At least one section should include a Triple T field perspective: "In projects we've worked on...", "A question we always ask early in the engagement is..."
+### Body — 3-5 sections with ## H2 headings:
+Each section built from 3 layers:
+1. Diagnosis — what's happening, the data, the pattern
+2. Analysis — why it happens, what drives it, what most miss
+3. Implication — what this means for large enterprises in practice
 
-H2 headings — make them declarative and specific:
-- Not: "Current Market Analysis"
-- Yes: "Why 70% of AI Projects Fail Before They Start", "The Question Your Data Center Vendor Won't Ask You"
+H2 headings must be declarative and specific:
+- NOT: "Current Market Analysis", "Technical Considerations"
+- YES: "The Question Most CIOs Ask Too Late", "Where the Budget Goes Before the Project Starts"
 
-### Conclusion (2-3 paragraphs + CTA):
-End with a sharp insight or an open question that invites reflection. Include a relevant call-to-action for Triple T's consulting services.
+One section (and only one) should include a Triple T field perspective in a single paragraph — not a sales pitch, a professional observation:
+"In projects we've worked on, the pattern repeats itself: ..."
+"A question we always ask early in the engagement is..."
+
+### Conclusion (2-3 paragraphs):
+End with a sharp insight that stays with the reader. Open question or specific call-to-action.
+Never start with "In conclusion" or "To summarize". End on a thought, not a recap.
 
 ## Writing rules:
 DO:
 - Use specific numbers and data points from the sources
 - Short punchy sentences for key points: "Three servers. One million dollars. Zero redundancy."
 - Paragraphs of 3-5 sentences with clear white space between them
-- Length: 1500-2500 words
+- Length: 1800-2500 words, 3-5 H2 sections
 
 DO NOT:
 - Use em dashes to connect sentences — use a comma, colon, or new sentence instead
-- Use filler phrases: "It's worth noting", "Needless to say", "In the current landscape", "It goes without saying"
-- Use hollow adjectives: "revolutionary", "groundbreaking", "unprecedented" — unless backed by a specific fact
+- Use filler phrases: "It's worth noting", "Needless to say", "In the current landscape", "It goes without saying", "Needless to say", "As we all know"
+- Use hollow adjectives: "revolutionary", "groundbreaking", "unprecedented", "game-changing" — unless backed by a specific fact
+- Use long bullet lists — prefer flowing prose
 - Invent facts not present in the provided source material
 
 If the user provided specific instructions — they override these general guidelines.
@@ -89,39 +97,48 @@ Return ONLY via the emit_blog_draft tool. No free text.`;
 
 ## מבנה המאמר (חובה):
 
+### כותרת:
+ספציפית, אמירותית, ממוקדת. לא: "מגמות בתשתיות AI". כן: "למה 70% מפרויקטי AI נכשלים לפני שהתחילו" / "השאלה שספק ה-Data Center שלך לא ישאל אותך".
+
 ### מבוא (2-3 פסקאות):
-פתח עם hook — בחר אחת:
+פתח עם hook — בחר גישה אחת ותתחייב אליה:
 - שאלה חדה שחותכת לבעיה האמיתית
 - נתון ספציפי שמערער על דעה מקובלת
 - תרחיש מוחשי שמדגים את הסיכון
 - תצפית שהיא היפוך ציפיות
-אסור: "בעולם המשתנה", "הטכנולוגיה מהפכת", "בתקופה שבה"
+אסור: "בעולם המשתנה", "הטכנולוגיה מהפכת", "בתקופה שבה", "אין ספק ש", "בשנים האחרונות", "לאחרונה אנו עדים ל"
 
-### גוף — 3-4 סעיפים עם כותרות ## H2:
-כל סעיף חייב לכלול:
-1. טענה מרכזית ברורה
-2. ראיות וניתוח מהמקורות
-3. ההשלכה העסקית/תפעולית לארגון גדול
-בלפחות סעיף אחד — הוסף זווית מניסיון Triple T בצורה טבעית: "בפרויקטים שליווינו...", "השאלה הראשונה שאנחנו שואלים בתחילת כל מעורבות היא..."
+### גוף — 3-5 סעיפים עם כותרות ## H2:
+כל סעיף בנוי מ-3 שכבות:
+1. אבחנה — מה קורה בפועל, מה הנתון, מה הדפוס
+2. ניתוח — למה זה קורה, מה מניע את זה, מה לרוב מפספסים
+3. השלכה — מה זה אומר לארגון ישראלי גדול בפועל
 
 כותרות H2 — ספציפיות ואמירותיות:
-- לא: "ניתוח המצב הנוכחי"
-- כן: "למה 70% מפרויקטי AI נכשלים לפני שהתחילו", "השאלה שספק ה-Data Center שלך לא ישאל אותך"
+- לא: "ניתוח המצב הנוכחי", "שיקולים טכניים"
+- כן: "השאלה שרוב המנהלים שואלים מאוחר מדי", "לאן הולך התקציב לפני שהפרויקט מתחיל"
 
-### סיכום (2-3 פסקאות + CTA):
-סיים עם תובנה חדה או שאלה פתוחה שמזמינה שיחה. כלול קריאה לפעולה רלוונטית לשירותי Triple T.
+סעיף אחד בלבד (ולא יותר) — תובנה מניסיון שטח בפסקה אחת. לא פרסומת, תובנה מקצועית:
+"בפרויקטים שליווינו, הדפוס חוזר על עצמו: ..."
+"השאלה הראשונה שאנחנו שואלים בתחילת כל מעורבות היא..."
+
+### סיום (2-3 פסקאות):
+סיים עם תובנה חדה שנשארת. שאלה פתוחה או קריאה לפעולה ספציפית.
+אסור: "לסיכום", "לסיכום הדברים", "ראינו ש". סיים על מחשבה, לא על סיכום.
 
 ## כללי ניסוח:
 לעשות:
 - מספרים ונתונים ספציפיים מהמקורות
 - משפטים קצרים לנקודות מפתח: "שלושה שרתים. מיליון שקל. אפס redundancy."
 - פסקאות של 3-5 משפטים עם רווח ביניהן
-- אורך: 1500-2500 מילים
+- אורך: 1500-2500 מילים, 3-5 כותרות H2
 
-לא לעשות:
+לא לעשות — רשימה שחורה:
 - em dash לחיבור משפטים — השתמש בפסיק, נקודותיים, או משפט חדש
-- "חשוב לציין", "ללא ספק", "מעניין לציין", "לא ניתן להכחיש"
-- "פורץ דרך", "מהפכני", "חסר תקדים" — אלא אם יש עובדה שמגבה
+- "חשוב לציין", "ללא ספק", "מעניין לציין", "לא ניתן להכחיש", "ראוי לציין"
+- "פורץ דרך", "מהפכני", "חסר תקדים", "משנה את המשחק" — אלא אם יש עובדה שמגבה
+- "במהלך השנים", "לא ניתן להתעלם", "בהמשך לכך", "מעבר לכך", "כידוע"
+- bullets ארוכים — עדיף טקסט זורם
 - המצאת עובדות שלא הופיעו בחומר
 
 אם המשתמש נתן הנחיות ספציפיות — הן גוברות על כל ההנחיות הכלליות.
@@ -284,16 +301,20 @@ Deno.serve(async (req) => {
       items = (data ?? []) as ItemRow[];
     }
 
+    const lbl = language === "en"
+      ? { summary: "Summary", why: "Why it matters", tags: "Tags", source: "Source", note: "Specific note for this source" }
+      : { summary: "סיכום", why: "חשיבות", tags: "תגיות", source: "מקור", note: "הנחייה ספציפית למקור זה" };
+
     const sourceBlock = items
       .map((it, idx) => {
         const note = sourceNotes[`db:${it.id}`];
         const lines = [
           `[#${idx + 1}] ${it.title_he}`,
-          it.summary_he ? `Summary: ${it.summary_he}` : null,
-          it.why_it_matters ? `Why it matters: ${it.why_it_matters}` : null,
-          it.tags_ai?.length ? `Tags: ${it.tags_ai.join(", ")}` : null,
-          it.url ? `Source: ${it.url}` : null,
-          note ? `Specific note for this source: ${note}` : null,
+          it.summary_he ? `${lbl.summary}: ${it.summary_he}` : null,
+          it.why_it_matters ? `${lbl.why}: ${it.why_it_matters}` : null,
+          it.tags_ai?.length ? `${lbl.tags}: ${it.tags_ai.join(", ")}` : null,
+          it.url ? `${lbl.source}: ${it.url}` : null,
+          note ? `${lbl.note}: ${note}` : null,
         ].filter(Boolean);
         return lines.join("\n");
       })
