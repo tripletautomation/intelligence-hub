@@ -220,7 +220,7 @@ Deno.serve(async (req) => {
     if (itemIds.length > 10) {
       return json({ error: "ניתן לבחור עד 10 פריטים בו-זמנית" }, 400);
     }
-    if (itemIds.length < 1 && !webContext) {
+    if (itemIds.length < 1 && !webContext && !instructions) {
       return json({ error: "יש לבחור לפחות מקור אחד" }, 400);
     }
 

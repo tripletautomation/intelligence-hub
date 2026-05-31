@@ -252,7 +252,7 @@ Deno.serve(async (req) => {
       ? body.web_context.trim() : null;
 
     if (itemIds.length > 10) return json({ error: "Maximum 10 source items" }, 400);
-    if (itemIds.length < 1 && !webContext) return json({ error: "At least one source required" }, 400);
+    if (itemIds.length < 1 && !webContext && !instructions) return json({ error: "At least one source required" }, 400);
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
