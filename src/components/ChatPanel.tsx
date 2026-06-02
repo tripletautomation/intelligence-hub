@@ -4,11 +4,19 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { X, Send, Sparkles, Globe, Loader2, ExternalLink } from "lucide-react";
+import { X, Send, Sparkles, Globe, Loader2, ExternalLink, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface DraftResult {
+  id: string;
+  title: string;
+  content_type: string | null;
+  created_at: string;
+  excerpt: string;
+}
 
 interface Message {
   role: "user" | "assistant";
@@ -22,11 +30,13 @@ interface Message {
     explanation?: string;
   };
   web_blocks?: { title: string; url: string; snippet: string }[];
+  draft_results?: DraftResult[];
   creating?: boolean;
 }
 
 const QUICK_CHIPS = [
   { label: "סכם את השבוע", prompt: "תסכם את הידיעות הכי חשובות מהשבוע האחרון" },
+  { label: "מאמרים על AI", prompt: "חפש לי מאמרים ופוסטים שכתבנו בעבר על AI" },
   { label: "מה חדש ב-AI?", prompt: "מה קרה לאחרונה בתחום ה-AI ומודלי שפה גדולים?" },
   { label: "חדשות סייבר", prompt: "תסכם את חדשות הסייבר האחרונות" },
   { label: "Data Centers", prompt: "מה קרה לאחרונה בתחום Data Centers ותשתיות מחשוב?" },
@@ -90,6 +100,7 @@ export const ChatPanel = ({ onClose }: Props) => {
           content: d.message ?? "לא התקבלה תשובה.",
           action: d.action ?? undefined,
           web_blocks: d.web_blocks?.length ? d.web_blocks : undefined,
+          draft_results: d.draft_results?.length ? d.draft_results : undefined,
         },
       ]);
     } catch (e) {
@@ -203,6 +214,26 @@ export const ChatPanel = ({ onClose }: Props) => {
                 ? "bg-accent text-accent-foreground rounded-br-sm"
                 : "bg-muted text-foreground rounded-bl-sm"
             )}>
+              {/* Draft results */}
+              {msg.draft_results && msg.draft_results.length > 0 && (
+                <div className="mb-2 space-y-1.5">
+                  <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                    <FileText className="h-3 w-3" /> מאמרים שנמצאו
+                  </div>
+                  {msg.draft_results.map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => nav(`/drafts/${d.id}`)}
+                      className="block w-full text-right p-1.5 rounded-md border border-border bg-background/60 hover:bg-background text-xs transition-colors"
+                    >
+                      <div className="font-medium text-foreground line-clamp-1">{d.title}</div>
+                      <div className="text-muted-foreground line-clamp-1 mt-0.5">{d.excerpt}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {/* Web blocks */}
               {msg.web_blocks && msg.web_blocks.length > 0 && (
                 <div className="mb-2 space-y-1.5">
