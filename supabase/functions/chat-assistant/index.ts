@@ -313,7 +313,7 @@ ${writingStyleRes.data?.prompt_text ? `\n## סגנון כתיבה:\n${writingSty
         ? "https://api.openai.com/v1/chat/completions"
         : "https://ai.gateway.lovable.dev/v1/chat/completions";
 
-      const callOpenAI = async (msgs: { role: string; content: string }[]) => {
+      const callOpenAI = async (msgs: unknown[]) => {
         const res = await fetch(baseUrl, {
           method: "POST",
           headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -336,10 +336,11 @@ ${writingStyleRes.data?.prompt_text ? `\n## סגנון כתיבה:\n${writingSty
           if (toolCall.function.name === "create_content") {
             assistantMessage = args.explanation ?? "מכין את הטיוטה עבורך...";
           } else {
+            // Pass the assistant message with tool_calls intact (not stringified)
             const continued = await callOpenAI([
               ...openAIMessages,
-              { role: "assistant", content: JSON.stringify(choice.message) },
-              { role: "tool" as any, content: toolResult, tool_call_id: toolCall.id } as any,
+              { role: "assistant", content: null, tool_calls: choice.message.tool_calls },
+              { role: "tool", content: toolResult, tool_call_id: toolCall.id },
             ]);
             assistantMessage = continued.choices?.[0]?.message?.content ?? "";
           }
