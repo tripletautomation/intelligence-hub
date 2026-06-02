@@ -130,6 +130,18 @@ Deno.serve(async (req) => {
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
+    // Load draft from DB — fallback if article_context not sent by frontend
+    let ctx = article_context;
+    if (!ctx?.title && !ctx?.body) {
+      const { data: draftRow } = await admin
+        .from("article_drafts")
+        .select("title,intro,body,closing")
+        .eq("id", draft_id)
+        .maybeSingle();
+      if (!draftRow) return json({ error: "הטיוטה לא נמצאה" }, 404);
+      ctx = { title: draftRow.title ?? "", intro: draftRow.intro ?? "", body: draftRow.body ?? "", closing: draftRow.closing ?? "" };
+    }
+
     // Read AI config — use light (fast/cheap) model tier for editing tasks
     const [aiConfigRes, writingStyleRes] = await Promise.all([
       admin.from("ai_config").select("provider,model_id").eq("id", "default").maybeSingle(),
@@ -162,15 +174,16 @@ Deno.serve(async (req) => {
       effectiveAction = `כתוב את הקטע מחדש לחלוטין בהתאם להנחיות הבאות של המשתמש:\n${article_instructions}`;
     }
 
-    const userPrompt = `כותרת המאמר: "${article_context.title}"
+    const sectionText = (ctx as any)[section] ?? ctx.body ?? "";
+    const userPrompt = `כותרת המאמר: "${ctx.title}"
 
 קטע לעריכה (${sectionLabel}):
-${article_context[section]}
+${sectionText}
 
 הקשר — שאר המאמר:
-פתיח: ${section !== "intro" ? article_context.intro?.slice(0, 200) : "[זה הקטע הנוכחי]"}
-גוף: ${section !== "body" ? article_context.body?.slice(0, 300) : "[זה הקטע הנוכחי]"}
-סיכום: ${section !== "closing" ? article_context.closing?.slice(0, 150) : "[זה הקטע הנוכחי]"}
+פתיח: ${section !== "intro" ? (ctx.intro?.slice(0, 200) ?? "") : "[זה הקטע הנוכחי]"}
+גוף: ${section !== "body" ? (ctx.body?.slice(0, 300) ?? "") : "[זה הקטע הנוכחי]"}
+סיכום: ${section !== "closing" ? (ctx.closing?.slice(0, 150) ?? "") : "[זה הקטע הנוכחי]"}
 
 פעולה: ${effectiveAction}
 ${toneInstruction ? `סגנון: ${toneInstruction}` : ""}
