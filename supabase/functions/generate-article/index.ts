@@ -258,7 +258,7 @@ Deno.serve(async (req) => {
       if (itemsErr) return json({ error: itemsErr.message }, 500);
       items = (data ?? []) as ItemRow[];
     }
-    if (items.length === 0 && !webContext) {
+    if (items.length === 0 && !webContext && !instructions) {
       return json({ error: "לא נמצאו פריטים" }, 404);
     }
 
