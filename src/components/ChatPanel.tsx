@@ -76,9 +76,13 @@ export const ChatPanel = ({ onClose }: Props) => {
       const { data, error } = await supabase.functions.invoke("chat-assistant", {
         body: { messages: history, days_back: 14 },
       });
-      if (error) throw new Error(error.message);
+      if (error) {
+        const detail = await (error as any).context?.json?.().then((b: any) => b?.error).catch(() => null);
+        throw new Error(detail || error.message);
+      }
 
       const d = data as any;
+      if (d?.error) throw new Error(d.error);
       setMessages((prev) => [
         ...prev,
         {
