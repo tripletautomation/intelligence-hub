@@ -5,8 +5,9 @@ import { AppLayout } from "@/components/AppLayout";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDrawer } from "@/components/ItemDrawer";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Search, LayoutList, Tag, ChevronDown, ChevronUp, Zap, Calendar, Clock, Archive, CheckSquare, X, Loader2, MessageSquare } from "lucide-react";
+import { RefreshCw, Search, LayoutList, Tag, ChevronDown, ChevronUp, Zap, Calendar, Clock, Archive, CheckSquare, X, Loader2, MessageSquare, Newspaper } from "lucide-react";
 import { NewsSearchPanel } from "@/components/NewsSearchPanel";
+import { WeeklyBriefPanel } from "@/components/WeeklyBriefPanel";
 import { ChatPanel } from "@/components/ChatPanel";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -89,6 +90,7 @@ const Dashboard = () => {
   const [openItem, setOpenItem] = useState<Item | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [newsSearchOpen, setNewsSearchOpen] = useState(false);
+  const [weeklyBriefOpen, setWeeklyBriefOpen] = useState(false);
   const [groupMode, setGroupMode] = useState<GroupMode>("time");
   const [collapsedBuckets, setCollapsedBuckets] = useState<Set<string>>(new Set(["older"]));
   const [selectMode, setSelectMode] = useState(false);
@@ -345,6 +347,15 @@ const Dashboard = () => {
           </Button>
           <Button
             size="sm"
+            variant="outline"
+            onClick={() => setWeeklyBriefOpen(true)}
+            className="gap-2 border-accent/40 text-accent hover:bg-accent/10"
+          >
+            <Newspaper className="h-4 w-4" />
+            בריף השבוע
+          </Button>
+          <Button
+            size="sm"
             onClick={handleRefresh}
             disabled={refreshing}
             className="gap-2 bg-accent hover:bg-accent/90 text-accent-foreground font-semibold shadow-sm"
@@ -467,6 +478,7 @@ const Dashboard = () => {
       />
 
       <NewsSearchPanel open={newsSearchOpen} onOpenChange={setNewsSearchOpen} />
+      <WeeklyBriefPanel open={weeklyBriefOpen} onOpenChange={setWeeklyBriefOpen} />
 
       {/* Multi-select action bar */}
       {selectMode && (

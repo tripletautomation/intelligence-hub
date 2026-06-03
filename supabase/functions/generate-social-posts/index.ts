@@ -49,11 +49,15 @@ LinkedIn Best Practices to follow:
    - 3-5 האשטגים עבריים בסוף בלבד
 
 3. image_prompt — Image generation prompt in ENGLISH:
-   - ALWAYS anchor to Triple T brand aesthetic: dark charcoal or deep navy background, premium tech environment, dramatic cinematic lighting with subtle blue/cyan accent glow, sharp depth of field
-   - The SUBJECT must be specific to the article's topic: if about data centers write about server racks / cooling infrastructure / fiber cables; if about AI write about GPU clusters / neural network visualization; if about cybersecurity write about encrypted data flows / security operations centers
-   - Do NOT use: white backgrounds, people shaking hands, generic office stock photos, bright cheerful tones
-   - Style anchor: "dark premium tech photography, cinematic lighting, deep dramatic shadows, electric blue accent glow, ultra-sharp 4K, award-winning commercial photography, shot on Hasselblad"
-   - 120-180 words
+   - TripleT visual identity — always apply ALL of these:
+     * Background: deep charcoal (#1A1F2E) or dark navy (#0D1B2A) — no exceptions
+     * Accent: electric blue / cyan glow (#00A8FF) — used for highlights, light streaks, or edge lighting on the subject
+     * Lighting: cinematic single-source rim lighting, dramatic deep shadows
+     * Composition: subject centered or rule-of-thirds; leave the bottom-left 15% of frame clean and dark (space for text overlay)
+   - The SUBJECT must be specific to the article's topic: data centers → server racks / cooling infrastructure / fiber cable bundles; AI / HPC → GPU clusters / heat sink arrays; cybersecurity → SOC monitors / encrypted data flows; cloud → aerial data-center campus at night
+   - Style anchor: "dark premium tech editorial photography, cinematic blue-electric accent glow, deep dramatic shadows, ultra-sharp 4K, award-winning commercial photography, shot on Hasselblad H6D"
+   - Do NOT use: white backgrounds, people / faces / hands, generic office stock, bright or cheerful tones, abstract blobs, lens flare on entire frame
+   - Length: 130-200 words
 
 Style rules for linkedin_en and linkedin_he:
 - Do NOT use em dash to connect sentences. Use a comma, colon, or start a new sentence instead.

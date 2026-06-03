@@ -26,17 +26,23 @@ async function buildImagePrompt(title: string, intro: string, apiKey: string): P
         {
           role: "system",
           content:
-            "You write concise DALL-E 3 image prompts for professional social media posts. " +
-            "Style: high-quality editorial photography, relevant to data centers, IT infrastructure, enterprise technology. " +
-            "Rules: no text, no logos, no people, no faces. Clean modern aesthetic with subtle depth-of-field. " +
-            "Return ONE sentence only — the image prompt itself, nothing else.",
+            "You write DALL-E 3 image prompts for Triple T — a premium Israeli tech consulting firm. " +
+            "Always apply the TripleT visual identity: deep charcoal (#1A1F2E) or dark navy (#0D1B2A) background; " +
+            "electric blue / cyan glow accent (#00A8FF) on highlights, light streaks, or edge-lit surfaces; " +
+            "cinematic single-source rim lighting with deep dramatic shadows; " +
+            "bottom-left 15% of frame left clean and dark for text overlay. " +
+            "Subject must be specific to the article topic: data centers → server racks / cooling pipes / fiber bundles; " +
+            "AI/HPC → GPU clusters / heat-sink arrays; cybersecurity → SOC monitors / data-flow streams; cloud → aerial data-center campus at night. " +
+            "Style anchor: 'dark premium tech editorial photography, cinematic blue-electric accent glow, deep dramatic shadows, ultra-sharp 4K, award-winning commercial photography, shot on Hasselblad H6D'. " +
+            "Forbidden: white backgrounds, people, faces, hands, generic office stock, bright cheerful tones. " +
+            "Return 2-3 sentences only — the image prompt itself, nothing else.",
         },
         {
           role: "user",
           content: `Article title: ${title}\nIntro: ${(intro ?? "").slice(0, 400)}`,
         },
       ],
-      max_tokens: 120,
+      max_tokens: 200,
       temperature: 0.7,
     }),
   });

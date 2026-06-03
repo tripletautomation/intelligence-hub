@@ -16,10 +16,17 @@ interface ItemRow {
 
 function buildSystemPrompt(language: "he" | "en"): string {
   if (language === "en") {
-    return `You are writing a thought leadership blog post in English on behalf of Triple T — a technology consulting and planning company with 30 years of experience in data centers, HPC/GPU infrastructure, cybersecurity, and enterprise AI implementation in Israel.
+    return `You are writing a thought leadership blog post in English on behalf of Ofer Oz, CEO of Triple T — a technology consulting and planning company with 30 years of experience in data centers, HPC/GPU infrastructure, cybersecurity, and enterprise AI implementation in Israel.
+
+## Critical — writing angle:
+Do NOT summarize or rewrite the source articles. Transform each piece of news into a professional insight: what does this topic mean from the perspective of a CEO who has personally led dozens of complex projects?
+Include analysis of the impact on the Israeli enterprise market — government, defense, banking, large corporations.
+Take a clear position — not "on one hand / on the other hand" but what Ofer's expert view actually is.
+Use experiential language: "In projects we've worked on...", "We see this pattern repeatedly...", "The mistake most organizations make is...".
+The article must be professional analysis — not reporting. The reader should leave with an insight they didn't have before.
 
 ## Mission:
-Create a long-form, deeply researched blog article from the provided source items. Not a summary of each source — a single cohesive article with a clear argument and original perspective.
+Create a long-form, deeply researched blog article from the provided source items. Not a summary of each source — a single cohesive article with a clear argument and original professional perspective.
 
 ## Triple T's areas of expertise (weave these in naturally):
 - Data center design and construction (small to national-scale)
@@ -82,7 +89,15 @@ If the user provided specific instructions — they override these general guide
 Return ONLY via the emit_blog_draft tool. No free text.`;
   }
 
-  return `אתה כותב מאמר בלוג מקצועי ומעמיק בעברית עבור Triple T — חברת ייעוץ ותכנון טכנולוגי מובילה בישראל עם 30 שנות ניסיון בפרויקטים מורכבים.
+  return `אתה כותב מאמר בלוג מקצועי ומעמיק בעברית בשם עופר עוז, מנכ"ל Triple T — חברת ייעוץ ותכנון טכנולוגי מובילה בישראל עם 30 שנות ניסיון בפרויקטים מורכבים.
+
+## חובה — זווית הכתיבה:
+אל תסכם את הידיעות המקוריות ואל תשכתב אותן.
+הפוך כל ידיעה לתובנה מקצועית: מה המשמעות של הנושא הזה בעיניך כמנכ"ל שראה עשרות פרויקטים דומים?
+כלול ניתוח של ההשפעה על שוק ה-IT הישראלי — ממשלה, ביטחון, בנקאות ותאגידים גדולים.
+הצג עמדה ברורה: לא "מחד ומאידך" אלא מה דעת עופר כמומחה.
+השתמש בניסיון שלך: "בפרויקטים שליווינו...", "ראינו שוב ושוב...", "הטעות השכיחה שאנחנו רואים היא...".
+המאמר חייב להיות ניתוח מקצועי — לא דיווח. הקורא צריך לצאת עם תובנה שלא היתה לו לפני.
 
 ## תחומי מומחיות Triple T:
 - תכנון ובניית Data Centers מכל קנה מידה

@@ -20,7 +20,7 @@ import {
   ArrowRight, Loader2, Save, Trash2, Mail, Copy, Check,
   Wand2, Maximize2, Minimize2, RefreshCw, Sparkles,
   Globe, Plus, X, Linkedin, Image,
-  Share2, ChevronDown, ChevronUp, Lightbulb, ExternalLink, Eye, Pencil,
+  Share2, ChevronDown, ChevronUp, Lightbulb, ExternalLink, Eye, Pencil, Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { buildEmailBodyHtml } from "@/lib/articleHtml";
@@ -42,6 +42,8 @@ interface Draft {
   source_item_ids: string[];
   style_note: string | null;
   content_type: string | null;
+  status: string | null;
+  published_at: string | null;
   created_at: string;
 }
 
@@ -334,6 +336,26 @@ const DraftDetail = () => {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const [markingPublished, setMarkingPublished] = useState(false);
+
+  const markPublished = async () => {
+    setMarkingPublished(true);
+    try {
+      const { error } = await (supabase as any)
+        .from("article_drafts")
+        .update({ published_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+      toast.success("המאמר סומן כפורסם");
+      qc.invalidateQueries({ queryKey: ["article_drafts", id] });
+      qc.invalidateQueries({ queryKey: ["article_drafts"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה בסימון פרסום");
+    } finally {
+      setMarkingPublished(false);
+    }
+  };
+
   // ── AI Actions ───────────────────────────────────────────────────────────────
 
   const runRefine = async (action: AiAction, customInstruction?: string) => {
@@ -595,6 +617,23 @@ const DraftDetail = () => {
               <Linkedin className="h-4 w-4" />
               פרסם ב-LinkedIn
             </Button>
+          )}
+          {draft?.status === "approved" && !draft?.published_at && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 border-green-500/40 text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-950"
+              onClick={markPublished}
+              disabled={markingPublished}
+            >
+              {markingPublished ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              סמן כפורסם
+            </Button>
+          )}
+          {draft?.published_at && (
+            <span className="text-xs px-2 py-1 rounded-full bg-green-600/10 text-green-700 border border-green-600/20 dark:text-green-400">
+              פורסם {new Date(draft.published_at).toLocaleDateString("he-IL", { day: "numeric", month: "long" })}
+            </span>
           )}
           <Button variant="ghost" size="sm" onClick={onCopy} className="gap-1.5">
             {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}

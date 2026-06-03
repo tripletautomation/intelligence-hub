@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   FileText, Sparkles, Loader2, Mail, Trash2, Pencil,
   CheckCircle2, Archive as ArchiveIcon, RotateCcw, User, ChevronDown,
-  Linkedin, Globe, Globe2,
+  Linkedin, Globe, Globe2, Send,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { buildMailtoUrl } from "@/lib/mailto";
 
-type DraftStatus = "draft" | "approved" | "archived";
+type DraftStatus = "draft" | "approved" | "archived" | "published";
 type ContentType = "linkedin" | "blog_he" | "blog_en";
 
 interface DraftRow {
@@ -36,6 +36,7 @@ interface DraftRow {
   status: DraftStatus;
   content_type: ContentType;
   user_id: string | null;
+  published_at: string | null;
 }
 
 const CONTENT_TYPE_LABEL: Record<ContentType, string> = {
@@ -53,18 +54,21 @@ const CONTENT_TYPE_COLOR: Record<ContentType, string> = {
 const tabs: { id: DraftStatus; label: string; emptyHint: string }[] = [
   { id: "draft", label: "טיוטות", emptyHint: "עדיין לא יצרת טיוטות. בעמוד הראשי בחר פריטים ולחץ \"צור מאמר מהנבחרים\"." },
   { id: "approved", label: "מאושרים", emptyHint: "אין מאמרים מאושרים. סמן טיוטה כמאושרת מתוך כרטיס הטיוטה." },
+  { id: "published", label: "פורסמו", emptyHint: "אין מאמרים שסומנו כפורסמו עדיין. לחץ 'סמן כפורסם' על מאמר מאושר." },
   { id: "archived", label: "ארכיון", emptyHint: "אין מאמרים בארכיון." },
 ];
 
 const statusBadge: Record<DraftStatus, string> = {
   draft: "bg-accent/10 text-accent border-accent/20",
   approved: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20 dark:text-emerald-400",
+  published: "bg-green-600/10 text-green-700 border-green-600/20 dark:text-green-400",
   archived: "bg-muted text-muted-foreground border-border",
 };
 
 const statusLabel: Record<DraftStatus, string> = {
   draft: "טיוטה",
   approved: "מאושר",
+  published: "פורסם",
   archived: "בארכיון",
 };
 
@@ -83,6 +87,7 @@ const Drafts = () => {
   const [tab, setTab] = useState<DraftStatus>("draft");
   const [contentFilter, setContentFilter] = useState<ContentType | "all">("all");
   const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [markingPublishedId, setMarkingPublishedId] = useState<string | null>(null);
 
   const { data: rows = [], isLoading } = useQuery({
     enabled: !!user,
@@ -90,7 +95,7 @@ const Drafts = () => {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("article_drafts")
-        .select("id,title,intro,source_item_ids,created_at,status,content_type,user_id")
+        .select("id,title,intro,source_item_ids,created_at,status,content_type,user_id,published_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as DraftRow[];
@@ -112,21 +117,27 @@ const Drafts = () => {
   });
 
   const counts = useMemo(() => {
-    const c: Record<DraftStatus, number> = { draft: 0, approved: 0, archived: 0 };
-    rows.forEach((r) => { c[r.status] = (c[r.status] ?? 0) + 1; });
+    const c: Record<DraftStatus, number> = { draft: 0, approved: 0, published: 0, archived: 0 };
+    rows.forEach((r) => {
+      if (r.published_at) c.published = (c.published ?? 0) + 1;
+      else c[r.status] = (c[r.status] ?? 0) + 1;
+    });
     return c;
   }, [rows]);
 
   const filtered = useMemo(
     () => rows
-      .filter((r) => r.status === tab)
+      .filter((r) => tab === "published" ? !!r.published_at : r.status === tab && !r.published_at)
       .filter((r) => contentFilter === "all" || (r.content_type ?? "linkedin") === contentFilter)
       .map((r) => ({
-      ...r,
-      created_label: new Date(r.created_at).toLocaleString("he-IL", {
-        day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
-      }),
-    })),
+        ...r,
+        created_label: new Date(r.created_at).toLocaleString("he-IL", {
+          day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+        }),
+        published_label: r.published_at
+          ? new Date(r.published_at).toLocaleString("he-IL", { day: "numeric", month: "long" })
+          : null,
+      })),
     [rows, tab, contentFilter],
   );
 
@@ -159,6 +170,23 @@ const Drafts = () => {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const markPublished = async (id: string) => {
+    setMarkingPublishedId(id);
+    try {
+      const { error } = await (supabase as any)
+        .from("article_drafts")
+        .update({ published_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+      toast.success("המאמר סומן כפורסם");
+      qc.invalidateQueries({ queryKey: ["article_drafts"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה בסימון פרסום");
+    } finally {
+      setMarkingPublishedId(null);
+    }
+  };
 
   const generateVersion = async (draft: DraftRow, target: GenerateTarget) => {
     setGeneratingId(draft.id);
@@ -308,12 +336,18 @@ const Drafts = () => {
                     )}>
                       {CONTENT_TYPE_LABEL[(d.content_type ?? "linkedin") as ContentType]}
                     </span>
-                    <span className={cn(
-                      "text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border font-semibold",
-                      statusBadge[d.status],
-                    )}>
-                      {statusLabel[d.status]}
-                    </span>
+                    {d.published_at ? (
+                      <span className={cn("text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border font-semibold", statusBadge.published)}>
+                        פורסם {(d as any).published_label}
+                      </span>
+                    ) : (
+                      <span className={cn(
+                        "text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border font-semibold",
+                        statusBadge[d.status],
+                      )}>
+                        {statusLabel[d.status]}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -364,13 +398,26 @@ const Drafts = () => {
                       ))}
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  {d.status !== "approved" && (
+                  {d.status !== "approved" && !d.published_at && (
                     <Button
                       size="sm" variant="ghost"
                       onClick={() => updateStatus.mutate({ id: d.id, status: "approved" })}
                       className="gap-1.5 h-8 text-emerald-600 hover:text-emerald-700"
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" /> אשר
+                    </Button>
+                  )}
+                  {d.status === "approved" && !d.published_at && (
+                    <Button
+                      size="sm" variant="ghost"
+                      onClick={() => markPublished(d.id)}
+                      disabled={markingPublishedId === d.id}
+                      className="gap-1.5 h-8 text-green-600 hover:text-green-700"
+                    >
+                      {markingPublishedId === d.id
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <Send className="h-3.5 w-3.5" />}
+                      סמן כפורסם
                     </Button>
                   )}
                   {d.status !== "archived" ? (
