@@ -65,12 +65,24 @@ async function tavilySearch(
       search_depth: "basic",
       max_results: 8,
       include_raw_content: false,
+      // Tavily only honors `days` when topic="news" — otherwise stale results.
+      topic: "news",
       days,
     }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`Tavily ${res.status}: ${JSON.stringify(data).slice(0, 200)}`);
   return Array.isArray(data?.results) ? (data.results as TavilyResult[]) : [];
+}
+
+// Keep only results published within the last `days` (drop undated/older ones)
+function filterRecent(results: TavilyResult[], days: number): TavilyResult[] {
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  return results.filter((r) => {
+    if (!r.published_date) return false;
+    const t = new Date(r.published_date).getTime();
+    return !isNaN(t) && t >= cutoff;
+  });
 }
 
 async function extractTopItems(
@@ -237,10 +249,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (allResults.length === 0) return json({ error: "No results from Tavily" }, 500);
+    // Enforce the 7-day window and surface the newest first, so the brief is
+    // genuinely "this week's news" and not whatever Tavily happened to return.
+    const recent = filterRecent(allResults, 7)
+      .sort((a, b) => new Date(b.published_date ?? 0).getTime() - new Date(a.published_date ?? 0).getTime());
 
-    // 2. Extract top 5 items via AI
-    const topItems = await extractTopItems(allResults, openaiKey, 5);
+    if (recent.length === 0) return json({ error: "לא נמצאו ידיעות חדשות מהשבוע האחרון. נסה שוב מאוחר יותר." }, 404);
+
+    // 2. Extract top 5 items via AI (from the recent, newest-first set)
+    const topItems = await extractTopItems(recent, openaiKey, 5);
     if (topItems.length === 0) return json({ error: "AI returned no items" }, 500);
 
     // 3. Add items to feed
