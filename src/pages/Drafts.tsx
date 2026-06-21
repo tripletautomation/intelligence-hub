@@ -6,9 +6,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   FileText, Sparkles, Loader2, Mail, Trash2, Pencil,
-  CheckCircle2, Archive as ArchiveIcon, RotateCcw, User, ChevronDown,
-  Linkedin, Globe, Globe2, Send, CheckSquare, X,
+  CheckCircle2, Archive as ArchiveIcon, RotateCcw, User,
+  Linkedin, Globe, Globe2, Send, CheckSquare, X, MoreHorizontal, CalendarClock,
 } from "lucide-react";
+import { SchedulePostsDialog } from "@/components/SchedulePostsDialog";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -32,6 +33,7 @@ interface DraftRow {
   id: string;
   title: string;
   intro: string | null;
+  body: string | null;
   source_item_ids: string[];
   created_at: string;
   status: DraftStatus;
@@ -53,9 +55,9 @@ const CONTENT_TYPE_COLOR: Record<ContentType, string> = {
 };
 
 const tabs: { id: DraftStatus; label: string; emptyHint: string }[] = [
-  { id: "draft", label: "טיוטות", emptyHint: "עדיין לא יצרת טיוטות. בעמוד הראשי בחר פריטים ולחץ \"צור מאמר מהנבחרים\"." },
-  { id: "approved", label: "מאושרים", emptyHint: "אין מאמרים מאושרים. סמן טיוטה כמאושרת מתוך כרטיס הטיוטה." },
-  { id: "published", label: "פורסמו", emptyHint: "אין מאמרים שסומנו כפורסמו עדיין. לחץ 'סמן כפורסם' על מאמר מאושר." },
+  { id: "draft", label: "טיוטות", emptyHint: "עדיין אין טיוטות. צרי תוכן מהדשבורד או מ\"מאמר מנושא\"." },
+  { id: "approved", label: "מוכנים לפרסום", emptyHint: "אין מאמרים מוכנים. לחצי \"סמן כמוכן\" על טיוטה שנבחרה — זו הגרסה שתעלה לרשתות." },
+  { id: "published", label: "פורסמו", emptyHint: "אין מאמרים שפורסמו עדיין." },
   { id: "archived", label: "ארכיון", emptyHint: "אין מאמרים בארכיון." },
 ];
 
@@ -68,7 +70,7 @@ const statusBadge: Record<DraftStatus, string> = {
 
 const statusLabel: Record<DraftStatus, string> = {
   draft: "טיוטה",
-  approved: "מאושר",
+  approved: "מוכן ✓",
   published: "פורסם",
   archived: "בארכיון",
 };
@@ -91,6 +93,7 @@ const Drafts = () => {
   const [markingPublishedId, setMarkingPublishedId] = useState<string | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [scheduleDraftId, setScheduleDraftId] = useState<string | null>(null);
 
   const toggleSelect = (id: string) =>
     setSelectedIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -102,7 +105,7 @@ const Drafts = () => {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("article_drafts")
-        .select("id,title,intro,source_item_ids,created_at,status,content_type,user_id,published_at")
+        .select("id,title,intro,body,source_item_ids,created_at,status,content_type,user_id,published_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as DraftRow[];
@@ -156,7 +159,7 @@ const Drafts = () => {
     },
     onSuccess: (_d, v) => {
       toast.success(
-        v.status === "approved" ? "המאמר אושר"
+        v.status === "approved" ? "המאמר סומן כמוכן לפרסום"
         : v.status === "archived" ? "המאמר הועבר לארכיון"
         : "המאמר הוחזר לטיוטות",
       );
@@ -408,8 +411,10 @@ const Drafts = () => {
                   <h3 className="text-base font-semibold text-primary leading-snug group-hover:text-accent transition-colors">
                     {d.title}
                   </h3>
-                  {d.intro && (
-                    <p className="text-sm text-foreground/70 leading-relaxed line-clamp-3 mt-1.5">{d.intro}</p>
+                  {(d.body || d.intro) && (
+                    <p className="text-sm text-foreground/70 leading-relaxed line-clamp-3 mt-1.5">
+                      {(d.body || d.intro || "").replace(/[#*_>`]/g, "").replace(/\s+/g, " ").trim().slice(0, 200)}
+                    </p>
                   )}
                 </Link>
 
@@ -417,83 +422,78 @@ const Drafts = () => {
                   מבוסס על {d.source_item_ids.length} פריטים
                 </div>
 
+                {/* Decluttered footer: 2 primary actions + "more" menu, delete separate */}
                 <div className="flex items-center gap-1 flex-wrap pt-2 border-t border-border mt-auto">
                   <Button size="sm" variant="ghost" onClick={() => nav(`/drafts/${d.id}`)} className="gap-1.5 h-8">
                     <Pencil className="h-3.5 w-3.5" /> ערוך
                   </Button>
-                  <Button asChild size="sm" variant="ghost" className="h-8">
-                    <a href={mailto} className="gap-1.5 inline-flex items-center">
-                      <Mail className="h-3.5 w-3.5" /> שלח
-                    </a>
-                  </Button>
-                  {/* Generate version dropdown */}
+
+                  {/* Contextual primary action by stage */}
+                  {!d.published_at && d.status !== "approved" && d.status !== "archived" && (
+                    <Button
+                      size="sm"
+                      onClick={() => updateStatus.mutate({ id: d.id, status: "approved" })}
+                      className="gap-1.5 h-8 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" /> סמן כמוכן
+                    </Button>
+                  )}
+                  {!d.published_at && d.status === "approved" && (
+                    <Button
+                      size="sm"
+                      onClick={() => setScheduleDraftId(d.id)}
+                      className="gap-1.5 h-8 bg-accent hover:bg-accent/90 text-accent-foreground"
+                    >
+                      <CalendarClock className="h-3.5 w-3.5" /> תזמן לרשתות
+                    </Button>
+                  )}
+                  {d.published_at && (
+                    <Button asChild size="sm" variant="outline" className="gap-1.5 h-8">
+                      <Link to="/queue"><CalendarClock className="h-3.5 w-3.5" /> תור פרסום</Link>
+                    </Button>
+                  )}
+
+                  <div className="flex-1" />
+
+                  {/* Everything else under one menu */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button size="sm" variant="outline" className="gap-1.5 h-8 border-accent/30 text-accent hover:bg-accent/10" disabled={generatingId === d.id}>
-                        {generatingId === d.id
-                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          : <Sparkles className="h-3.5 w-3.5" />}
-                        {generatingId === d.id ? "יוצר..." : "צור גרסה"}
-                        <ChevronDown className="h-3 w-3" />
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0" disabled={generatingId === d.id}>
+                        {generatingId === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-52">
-                      <DropdownMenuLabel className="text-xs text-muted-foreground">צור גרסה חדשה</DropdownMenuLabel>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuItem asChild className="gap-2 cursor-pointer text-sm">
+                        <a href={mailto}><Mail className="h-3.5 w-3.5" /> שלח במייל</a>
+                      </DropdownMenuItem>
+                      {d.status === "approved" && !d.published_at && (
+                        <DropdownMenuItem className="gap-2 cursor-pointer text-sm" onClick={() => markPublished(d.id)}>
+                          <Send className="h-3.5 w-3.5" /> סמן כפורסם
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuSeparator />
+                      <DropdownMenuLabel className="text-xs text-muted-foreground">צור גרסה חדשה</DropdownMenuLabel>
                       {GENERATE_OPTIONS.map((opt) => (
-                        <DropdownMenuItem
-                          key={opt.id}
-                          className="gap-2 cursor-pointer text-sm"
-                          onClick={() => generateVersion(d, opt.id)}
-                        >
+                        <DropdownMenuItem key={opt.id} className="gap-2 cursor-pointer text-sm" onClick={() => generateVersion(d, opt.id)}>
                           {opt.icon} {opt.label}
                         </DropdownMenuItem>
                       ))}
+                      <DropdownMenuSeparator />
+                      {d.status !== "archived" ? (
+                        <DropdownMenuItem className="gap-2 cursor-pointer text-sm" onClick={() => updateStatus.mutate({ id: d.id, status: "archived" })}>
+                          <ArchiveIcon className="h-3.5 w-3.5" /> העבר לארכיון
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem className="gap-2 cursor-pointer text-sm" onClick={() => updateStatus.mutate({ id: d.id, status: "draft" })}>
+                          <RotateCcw className="h-3.5 w-3.5" /> שחזר לטיוטות
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  {d.status !== "approved" && !d.published_at && (
-                    <Button
-                      size="sm" variant="ghost"
-                      onClick={() => updateStatus.mutate({ id: d.id, status: "approved" })}
-                      className="gap-1.5 h-8 text-emerald-600 hover:text-emerald-700"
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5" /> אשר
-                    </Button>
-                  )}
-                  {d.status === "approved" && !d.published_at && (
-                    <Button
-                      size="sm" variant="ghost"
-                      onClick={() => markPublished(d.id)}
-                      disabled={markingPublishedId === d.id}
-                      className="gap-1.5 h-8 text-green-600 hover:text-green-700"
-                    >
-                      {markingPublishedId === d.id
-                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        : <Send className="h-3.5 w-3.5" />}
-                      סמן כפורסם
-                    </Button>
-                  )}
-                  {d.status !== "archived" ? (
-                    <Button
-                      size="sm" variant="ghost"
-                      onClick={() => updateStatus.mutate({ id: d.id, status: "archived" })}
-                      className="gap-1.5 h-8"
-                    >
-                      <ArchiveIcon className="h-3.5 w-3.5" /> ארכיון
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm" variant="ghost"
-                      onClick={() => updateStatus.mutate({ id: d.id, status: "draft" })}
-                      className="gap-1.5 h-8"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" /> שחזר
-                    </Button>
-                  )}
-                  <div className="flex-1" />
+
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button size="sm" variant="ghost" className="gap-1.5 h-8 text-destructive hover:text-destructive">
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive hover:text-destructive">
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </AlertDialogTrigger>
@@ -558,6 +558,13 @@ const Drafts = () => {
           </div>
         </div>
       )}
+
+      {/* Schedule-to-networks dialog (loads the draft's posts/body itself) */}
+      <SchedulePostsDialog
+        open={!!scheduleDraftId}
+        onOpenChange={(o) => !o && setScheduleDraftId(null)}
+        draftId={scheduleDraftId ?? ""}
+      />
     </AppLayout>
   );
 };

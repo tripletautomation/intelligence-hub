@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -20,8 +21,12 @@ interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   draftId: string;
-  items: SchedulableItem[];
+  /** Pre-supplied items (e.g. from the editor). If empty, the dialog loads the
+   *  draft's social posts + body itself — so it also works from the drafts list. */
+  items?: SchedulableItem[];
 }
+
+const SOCIAL_PLATFORMS = ["linkedin_he", "linkedin_en", "instagram", "facebook"];
 
 // Local datetime-local string for `now + minutes`, e.g. "2026-06-21T14:30"
 function defaultScheduleValue(minutesAhead = 60): string {
@@ -32,13 +37,44 @@ function defaultScheduleValue(minutesAhead = 60): string {
 
 export const SchedulePostsDialog = ({ open, onOpenChange, draftId, items }: Props) => {
   const nav = useNavigate();
-  const available = useMemo(() => items.filter((i) => i.content?.trim()), [items]);
+  const provided = useMemo(() => (items ?? []).filter((i) => i.content?.trim()), [items]);
+
+  // When no items were passed (e.g. opened from the drafts list), load the
+  // draft's generated social posts plus its article body.
+  const { data: loaded = [] } = useQuery({
+    enabled: open && !!draftId && provided.length === 0,
+    queryKey: ["schedule_source", draftId],
+    queryFn: async (): Promise<SchedulableItem[]> => {
+      const [postsRes, draftRes] = await Promise.all([
+        (supabase as any).from("social_posts").select("platform,content").eq("draft_id", draftId),
+        (supabase as any).from("article_drafts").select("body,content_type").eq("id", draftId).maybeSingle(),
+      ]);
+      const out: SchedulableItem[] = [];
+      for (const p of (postsRes.data ?? [])) {
+        if (SOCIAL_PLATFORMS.includes(p.platform) && p.content?.trim()) {
+          out.push({ platform: p.platform as SchedulablePlatform, content: p.content });
+        }
+      }
+      const draft = draftRes.data;
+      if (draft?.body?.trim()) {
+        const plat: SchedulablePlatform = draft.content_type === "linkedin" ? "linkedin_he" : "blog";
+        if (!out.some((o) => o.platform === plat)) out.push({ platform: plat, content: draft.body });
+      }
+      return out;
+    },
+  });
+
+  const available = provided.length > 0 ? provided : loaded;
+  const availableKey = available.map((i) => i.platform).join(",");
   const [selected, setSelected] = useState<Set<SchedulablePlatform>>(new Set());
   const [when, setWhen] = useState<string>(defaultScheduleValue());
   const [saving, setSaving] = useState(false);
 
-  // Initialize selection to all available when the dialog opens
-  const initSelection = () => setSelected(new Set(available.map((i) => i.platform)));
+  // Select all available platforms when the dialog opens or the items load in
+  useEffect(() => {
+    if (open) setSelected(new Set(available.map((i) => i.platform)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, availableKey]);
 
   const toggle = (p: SchedulablePlatform) =>
     setSelected((prev) => { const n = new Set(prev); n.has(p) ? n.delete(p) : n.add(p); return n; });
@@ -73,10 +109,7 @@ export const SchedulePostsDialog = ({ open, onOpenChange, draftId, items }: Prop
   };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => { if (o) initSelection(); onOpenChange(o); }}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg" dir="rtl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
