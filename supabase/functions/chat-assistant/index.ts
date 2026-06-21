@@ -118,8 +118,8 @@ Deno.serve(async (req) => {
       admin.from("ai_config").select("provider,model_id").eq("id", "default").maybeSingle(),
       admin.from("ai_config").select("prompt_text").eq("id", "writing_style").maybeSingle(),
     ]);
-    const provider: string = configRes.data?.provider ?? "openai";
-    const modelId: string = configRes.data?.model_id ?? "gpt-4.1";
+    const provider: string = configRes.data?.provider ?? "anthropic";
+    const modelId: string = configRes.data?.model_id ?? "claude-sonnet-4-6";
 
     async function getApiKey(envName: string): Promise<string> {
       const { data } = await admin.from("admin_api_keys").select("key_value").eq("key_name", envName).maybeSingle();

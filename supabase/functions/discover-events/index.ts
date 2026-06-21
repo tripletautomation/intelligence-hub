@@ -206,11 +206,13 @@ Deno.serve(async (req) => {
     const events = await extractEvents(body.query, searchResults);
 
     const now = new Date();
-    // Hard filter: drop any event with a known past date — strictly future only
+    // Hard filter: strictly future events with a known, parseable date.
+    // Undated or unparseable events are dropped — an event with no date is
+    // useless on a calendar and pollutes the feed.
     const futureOnly = events.filter((e) => {
-      if (!e.event_date) return true; // keep events with unknown date
+      if (!e.event_date) return false;
       const d = new Date(e.event_date);
-      return isNaN(d.getTime()) || d >= now;
+      return !isNaN(d.getTime()) && d >= now;
     });
 
     // Optional client-side format hint reinforcement

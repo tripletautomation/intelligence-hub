@@ -60,7 +60,8 @@ async function callAI(
       },
       body: JSON.stringify({
         model: modelId,
-        max_tokens: 1024,
+        max_tokens: 1500,
+        temperature: 0.5,
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
       }),
@@ -147,7 +148,7 @@ Deno.serve(async (req) => {
       admin.from("ai_config").select("provider,model_id").eq("id", "default").maybeSingle(),
       admin.from("ai_config").select("prompt_text").eq("id", "writing_style").maybeSingle(),
     ]);
-    const provider = aiConfigRes.data?.provider ?? "openai";
+    const provider = aiConfigRes.data?.provider ?? "anthropic";
     const modelId = getLightModel(provider);
     const writingStylePrompt: string = writingStyleRes.data?.prompt_text?.trim() ?? "";
 

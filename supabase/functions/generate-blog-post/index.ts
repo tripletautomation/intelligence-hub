@@ -211,7 +211,8 @@ async function callAnthropic(modelId: string, userPrompt: string, apiKey: string
     },
     body: JSON.stringify({
       model: modelId,
-      max_tokens: 4096,
+      max_tokens: 8000,
+      temperature: 0.7,
       system: systemPrompt,
       tools: [{
         name: "emit_blog_draft",
@@ -301,8 +302,8 @@ Deno.serve(async (req) => {
     ]);
 
     const aiConfig = articleConfigRes.data ?? defaultConfigRes.data;
-    const provider: string = aiConfig?.provider ?? "openai";
-    const modelId: string = aiConfig?.model_id ?? "gpt-4.1";
+    const provider: string = aiConfig?.provider ?? "anthropic";
+    const modelId: string = aiConfig?.model_id ?? "claude-sonnet-4-6";
     const writingStylePrompt: string = writingStyleRes.data?.prompt_text?.trim() ?? "";
     const customPrompt: string = promptTemplateRes.data?.system_prompt?.trim() ?? "";
 
@@ -345,12 +346,20 @@ Deno.serve(async (req) => {
       items.length > 0 ? `\n--- Source items ---\n${sourceBlock}` : "",
     ].join("\n");
 
-    // If admin wrote a custom template → it IS the system prompt (replaces hardcoded base).
-    // Writing style appended as supplementary guidelines on top of whichever base is used.
-    const baseSystemPrompt = customPrompt || buildSystemPrompt(language);
-    const SYSTEM_PROMPT = writingStylePrompt
-      ? `${baseSystemPrompt}\n\n---\nAdditional writing style guidelines (must follow):\n${writingStylePrompt}`
-      : baseSystemPrompt;
+    // The hardcoded base prompt ALWAYS stays — it carries the brand voice,
+    // structure, and AI-phrase blacklist. Admin's custom template and the
+    // writing style are layered ON TOP as additional guidance, never replacing
+    // the base. Fixes the recurring "brand voice lost when a custom prompt is set".
+    const baseSystemPrompt = buildSystemPrompt(language);
+    const SYSTEM_PROMPT = [
+      baseSystemPrompt,
+      customPrompt
+        ? `\n\n---\nAdditional guidelines from settings (must incorporate, without dropping the base above):\n${customPrompt}`
+        : "",
+      writingStylePrompt
+        ? `\n\n---\nAdditional writing style guidelines (must follow):\n${writingStylePrompt}`
+        : "",
+    ].join("");
 
     let parsed: { title: string; intro: string; body: string; closing: string };
 

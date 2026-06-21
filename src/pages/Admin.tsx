@@ -28,8 +28,9 @@ const AI_PROVIDERS = [
     label: "Anthropic (Claude)",
     envKey: "ANTHROPIC_API_KEY",
     models: [
-      { id: "claude-opus-4-7", label: "Claude Opus 4.7 — הכי חזק" },
-      { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6 — מהיר ויכולת גבוהה" },
+      { id: "claude-opus-4-8", label: "Claude Opus 4.8 — הכי חזק (מומלץ למאמרים)" },
+      { id: "claude-opus-4-7", label: "Claude Opus 4.7" },
+      { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6 — מהיר ויכולת גבוהה (מומלץ לפוסטים)" },
       { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 — מהיר וזול" },
     ],
   },
@@ -178,16 +179,16 @@ const AiConfigSection = () => (
       <SingleAiConfig
         configId="article"
         label="מודל כתיבת מאמרים"
-        description="משמש ליצירת מאמרים מלאים. מומלץ: GPT-4.1 לאיכות כתיבה גבוהה."
-        defaultProvider="openai"
-        defaultModel="gpt-4.1"
+        description="משמש ליצירת מאמרים ובלוגים מלאים. מומלץ: Claude Opus 4.8 לאיכות כתיבה וקול-מותג גבוהים."
+        defaultProvider="anthropic"
+        defaultModel="claude-opus-4-8"
       />
       <SingleAiConfig
         configId="default"
-        label="מודל חיפוש וסיכומים"
-        description="משמש לחיפוש מקורות, סיכום חדשות, רשתות חברתיות ועיבוד רקע. מומלץ: GPT-4o mini לחיסכון בעלויות."
-        defaultProvider="openai"
-        defaultModel="gpt-4o-mini"
+        label="מודל חיפוש, סיכומים ופוסטים"
+        description="משמש לחיפוש מקורות, סיכום חדשות, פוסטים לרשתות, צ'אט ועיבוד רקע. מומלץ: Claude Sonnet 4.6 לאיזון איכות ועלות."
+        defaultProvider="anthropic"
+        defaultModel="claude-sonnet-4-6"
       />
     </div>
   </div>
@@ -585,7 +586,7 @@ const SinglePromptTemplate = ({ id, label, description }: { id: string; label: s
       <Textarea
         value={activeText}
         onChange={(e) => setText(e.target.value)}
-        placeholder="השאר ריק לשימוש בפרומפט ברירת המחדל המובנה. הזן הנחיות ספציפיות להוסיף או לדרוס."
+        placeholder="השאר ריק לשימוש בברירת המחדל המובנה. כל טקסט כאן מתווסף לפרומפט הבסיסי (כולל קול-המותג Triple T) — לא דורס אותו."
         className="min-h-[100px] text-sm font-mono leading-relaxed resize-y"
         dir="rtl"
       />
@@ -624,7 +625,7 @@ const PromptTemplatesSection = () => {
         <h2 className="text-lg font-bold text-primary">פרומפטים לסוגי תוכן</h2>
       </div>
       <p className="text-sm text-muted-foreground mb-4">
-        כתוב הנחיות ייחודיות לכל סוג תוכן. השאר ריק לשימוש בפרומפט הברירת מחדל המובנה.
+        כתוב הנחיות ייחודיות לכל סוג תוכן. ההנחיות <span className="font-medium text-foreground">מתווספות</span> לפרומפט הבסיסי (כולל קול-המותג Triple T ועופר עוז) ולא דורסות אותו. השאר ריק לשימוש בברירת המחדל בלבד.
       </p>
       <div className="flex gap-2 mb-4">
         {groups.map((g) => (

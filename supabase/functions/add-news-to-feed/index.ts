@@ -43,6 +43,7 @@ Deno.serve(async (req) => {
       tags?: string[];
       relevance_score?: number;
       region?: "israel" | "global";
+      published_date?: string | null;
     };
 
     if (!item?.url || !item?.title_he) {
@@ -73,7 +74,15 @@ Deno.serve(async (req) => {
         tags_ai: item.tags ?? [],
         relevance_score: item.relevance_score ?? 75,
         region: item.region ?? "global",
-        published_at: new Date().toISOString(),
+        // Use the article's real publication date when available; fall back to
+        // ingestion time only if the source provided no parseable date.
+        published_at: (() => {
+          if (item.published_date) {
+            const t = new Date(item.published_date).getTime();
+            if (!Number.isNaN(t)) return new Date(t).toISOString();
+          }
+          return new Date().toISOString();
+        })(),
       })
       .select("id")
       .single();

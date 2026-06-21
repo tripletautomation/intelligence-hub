@@ -213,7 +213,13 @@ async function ingestSource(source: {
         }
 
         const itemType = classify(entry.title, entry.link);
-        const publishedAt = entry.pubDate ? new Date(entry.pubDate).toISOString() : null;
+        // Use the feed's publication date when present and parseable; otherwise
+        // fall back to ingestion time so the item buckets as "recent" rather
+        // than silently sinking to "older" with a NULL date.
+        const parsedPubDate = entry.pubDate ? new Date(entry.pubDate).getTime() : NaN;
+        const publishedAt = !Number.isNaN(parsedPubDate)
+          ? new Date(parsedPubDate).toISOString()
+          : new Date().toISOString();
 
         const { error: insErr } = await admin.from("items").insert({
           source_id: source.id,

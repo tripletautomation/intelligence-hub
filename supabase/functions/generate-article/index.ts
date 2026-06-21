@@ -177,7 +177,8 @@ async function callAnthropic(modelId: string, userPrompt: string, apiKey: string
     },
     body: JSON.stringify({
       model: modelId,
-      max_tokens: 2048,
+      max_tokens: 4000,
+      temperature: 0.7,
       system: systemPrompt,
       tools: [{
         name: "emit_article_draft",
@@ -246,8 +247,8 @@ Deno.serve(async (req) => {
       admin.from("prompt_templates").select("system_prompt").eq("id", "article_linkedin").maybeSingle(),
     ]);
     const aiConfig = articleConfigRes.data ?? defaultConfigRes.data;
-    const provider: string = aiConfig?.provider ?? "openai";
-    const modelId: string = aiConfig?.model_id ?? "gpt-4.1";
+    const provider: string = aiConfig?.provider ?? "anthropic";
+    const modelId: string = aiConfig?.model_id ?? "claude-sonnet-4-6";
     const writingStylePrompt: string = writingStyleRes.data?.prompt_text?.trim() ?? "";
     const linkedinCustomPrompt: string = linkedinTemplateRes.data?.system_prompt?.trim() ?? "";
 
@@ -298,12 +299,21 @@ Deno.serve(async (req) => {
     let parsed: { title: string; intro: string; body: string; closing: string };
 
     try {
-      // If admin wrote a custom prompt → it IS the system prompt (replaces hardcoded base).
-      // Writing style appended as supplementary guidelines on top of whichever base is used.
-      const baseSystemPrompt = linkedinCustomPrompt || buildSystemPrompt(targetWords);
-      const SYSTEM_PROMPT = writingStylePrompt
-        ? `${baseSystemPrompt}\n\n---\nהנחיות סגנון כתיבה נוספות (חובה לשמור עליהן):\n${writingStylePrompt}`
-        : baseSystemPrompt;
+      // The hardcoded base prompt ALWAYS stays — it carries the brand voice
+      // (Triple T / עופר עוז), the structure, and the AI-phrase blacklist.
+      // Admin's custom prompt and the writing style are layered ON TOP as
+      // additional guidance, never replacing the base. This fixes the recurring
+      // "prompts don't work / brand voice lost" problem.
+      const baseSystemPrompt = buildSystemPrompt(targetWords);
+      const SYSTEM_PROMPT = [
+        baseSystemPrompt,
+        linkedinCustomPrompt
+          ? `\n\n---\nהנחיות נוספות מההגדרות (חובה לשלב, מבלי לוותר על הבסיס למעלה):\n${linkedinCustomPrompt}`
+          : "",
+        writingStylePrompt
+          ? `\n\n---\nהנחיות סגנון כתיבה נוספות (חובה לשמור עליהן):\n${writingStylePrompt}`
+          : "",
+      ].join("");
 
       if (provider === "anthropic") {
         const key = await getApiKey("ANTHROPIC_API_KEY");
