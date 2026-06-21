@@ -186,7 +186,6 @@ async function generatePosts(
       body: JSON.stringify({
         model: modelId,
         max_tokens: 4000,
-        temperature: 0.7,
         system: SYSTEM_PROMPT,
         tools: [{ name: "emit_social_posts", description: tool.function.description, input_schema: tool.function.parameters }],
         tool_choice: { type: "tool", name: "emit_social_posts" },

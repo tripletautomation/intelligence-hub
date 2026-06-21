@@ -178,7 +178,6 @@ async function callAnthropic(modelId: string, userPrompt: string, apiKey: string
     body: JSON.stringify({
       model: modelId,
       max_tokens: 4000,
-      temperature: 0.7,
       system: systemPrompt,
       tools: [{
         name: "emit_article_draft",

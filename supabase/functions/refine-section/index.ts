@@ -61,7 +61,6 @@ async function callAI(
       body: JSON.stringify({
         model: modelId,
         max_tokens: 1500,
-        temperature: 0.5,
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
       }),
