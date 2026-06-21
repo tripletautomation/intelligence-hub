@@ -22,6 +22,7 @@ interface ItemRow {
   why_it_matters: string | null;
   tags_ai: string[] | null;
   created_at: string;
+  published_at: string | null;
   region: string | null;
   url: string | null;
 }
@@ -126,13 +127,15 @@ Deno.serve(async (req) => {
       return data?.key_value || Deno.env.get(envName) || "";
     }
 
-    // Load recent news items
+    // Load recent news items by REAL publication date (published_at), not when
+    // they were added to the DB — otherwise old articles added recently look
+    // like fresh news. Fall back to created_at only when published_at is null.
     const since = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
     const { data: items } = await admin
       .from("items")
-      .select("id,title_he,summary_he,why_it_matters,tags_ai,created_at,region,url")
-      .gte("created_at", since)
-      .order("created_at", { ascending: false })
+      .select("id,title_he,summary_he,why_it_matters,tags_ai,created_at,published_at,region,url")
+      .or(`published_at.gte.${since},and(published_at.is.null,created_at.gte.${since})`)
+      .order("published_at", { ascending: false, nullsFirst: false })
       .limit(40);
 
     const allItems = (items ?? []) as ItemRow[];
@@ -155,7 +158,8 @@ Deno.serve(async (req) => {
     // Format items for context
     const itemsContext = allItems.length > 0
       ? allItems.map((it, i) => {
-          const date = new Date(it.created_at).toLocaleDateString("he-IL");
+          const dateIso = it.published_at ?? it.created_at;
+          const date = new Date(dateIso).toLocaleDateString("he-IL");
           const tags = it.tags_ai?.slice(0, 3).join(", ") ?? "";
           const region = it.region === "israel" ? "🇮🇱" : it.region === "global" ? "🌍" : "";
           return `[${i + 1}] ID:${it.id} ${region} ${date}\n${it.title_he}\n${it.summary_he ? `סיכום: ${it.summary_he.slice(0, 150)}` : ""}${it.why_it_matters ? `\nחשיבות: ${it.why_it_matters.slice(0, 100)}` : ""}${tags ? `\nתגיות: ${tags}` : ""}`;
@@ -171,9 +175,12 @@ Deno.serve(async (req) => {
         }).join("\n")
       : "אין טיוטות שנוצרו עדיין.";
 
+    const todayHe = new Date().toLocaleDateString("he-IL", { day: "numeric", month: "long", year: "numeric" });
     const systemPrompt = `אתה עוזר אישי מודיעיני של Triple T — חברת ייעוץ טכנולוגי ישראלית המתמחה ב-Data Centers, תשתיות מחשוב, סייבר ו-AI.
 
-יש לך גישה ל-${allItems.length} ידיעות שנאספו ב-${daysBack} הימים האחרונים, ולרשימת כל הטיוטות שנוצרו.
+התאריך היום: ${todayHe}. כל ידיעה למטה מסומנת בתאריך הפרסום שלה. כשמבקשים "מהשבוע" / "לאחרונה" — התייחס אך ורק לידיעות שתאריך הפרסום שלהן בטווח המבוקש, ואל תציג ידיעות ישנות כאילו הן חדשות. אם אין ידיעות עדכניות בנושא — אמור זאת והצע לחפש ברשת (search_web).
+
+יש לך גישה ל-${allItems.length} ידיעות (לפי תאריך פרסום), ולרשימת כל הטיוטות שנוצרו.
 
 ## ידיעות שנאספו:
 ${itemsContext}
@@ -197,7 +204,8 @@ ${writingStyleRes.data?.prompt_text ? `\n## סגנון כתיבה:\n${writingSty
         const res = await fetch(`${SUPABASE_URL}/functions/v1/research-web`, {
           method: "POST",
           headers: { "Authorization": authHeader, "Content-Type": "application/json" },
-          body: JSON.stringify({ query, context }),
+          // Bias the chat's web search toward recent news (last ~30 days)
+          body: JSON.stringify({ query, context, days: 30 }),
         });
         if (!res.ok) return [];
         const data = await res.json();

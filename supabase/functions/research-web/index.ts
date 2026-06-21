@@ -13,17 +13,24 @@ interface ResearchBlock {
   relevance: number;
 }
 
-async function tavilySearch(query: string, apiKey: string) {
+async function tavilySearch(query: string, apiKey: string, days?: number) {
+  const body: Record<string, unknown> = {
+    api_key: apiKey,
+    query,
+    search_depth: "basic",
+    max_results: 10,
+    include_raw_content: false,
+  };
+  // When a recency window is requested, switch to the news topic so Tavily
+  // actually honors `days` (it ignores `days` for the default general topic).
+  if (days && days > 0) {
+    body.topic = "news";
+    body.days = days;
+  }
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      api_key: apiKey,
-      query,
-      search_depth: "basic",
-      max_results: 10,
-      include_raw_content: false,
-    }),
+    body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`Tavily ${res.status}: ${JSON.stringify(data).slice(0, 200)}`);
@@ -122,11 +129,12 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const query: string = typeof body?.query === "string" ? body.query.trim() : "";
     const context: string = typeof body?.context === "string" ? body.context.trim() : "";
+    const days: number | undefined = typeof body?.days === "number" && body.days > 0 ? body.days : undefined;
 
     if (!query) return json({ error: "query is required" }, 400);
 
     const searchQuery = `${query} data center infrastructure technology`;
-    const rawResults = await tavilySearch(searchQuery, TAVILY_API_KEY);
+    const rawResults = await tavilySearch(searchQuery, TAVILY_API_KEY, days);
 
     if (rawResults.length === 0) return json({ blocks: [] });
 

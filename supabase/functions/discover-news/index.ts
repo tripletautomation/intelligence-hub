@@ -39,6 +39,9 @@ async function tavilySearch(query: string, apiKey: string, maxResults = 12, days
     search_depth: "basic",
     max_results: maxResults,
     include_raw_content: false,
+    // CRITICAL: Tavily only honors the `days` recency filter when topic="news".
+    // Without this, `days` is silently ignored and stale results come back.
+    topic: "news",
   };
   if (days && days < 365) body.days = days;
 
@@ -57,14 +60,13 @@ async function tavilySearch(query: string, apiKey: string, maxResults = 12, days
 function filterByDays(results: TavilyResult[], days: number): TavilyResult[] {
   if (days >= 365) return results; // "all time" — keep everything
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  // With topic="news" Tavily reliably returns published_date, so we can enforce
+  // the window strictly: drop anything provably older, and drop undated results
+  // too (for a "last week" search, an undated result is not trustworthy).
   return results.filter((r) => {
-    // Tavily frequently omits published_date. Keep undated results — filtering
-    // them all out empties most searches. Only drop results we can date AND
-    // that are provably older than the window. The downstream feed handles
-    // missing dates (add-news-to-feed falls back to ingestion time).
-    if (!r.published_date) return true;
+    if (!r.published_date) return false;
     const t = new Date(r.published_date).getTime();
-    return isNaN(t) || t >= cutoff;
+    return !isNaN(t) && t >= cutoff;
   });
 }
 
