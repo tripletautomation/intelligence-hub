@@ -1,7 +1,7 @@
 import type { Item, Source, ItemUserState } from "@/lib/types";
 import { RegionBadge } from "./RegionBadge";
-import { formatHeRelative } from "@/lib/format";
-import { Bookmark, BookmarkCheck, ExternalLink, ThumbsDown, ThumbsUp, Check, Calendar, Mail, Trash2, RotateCcw, X } from "lucide-react";
+import { formatHeRelative, formatHeSmartDate, formatHeDateTime } from "@/lib/format";
+import { Bookmark, BookmarkCheck, ExternalLink, ThumbsDown, ThumbsUp, Check, Calendar, Mail, Trash2, RotateCcw, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -20,12 +20,17 @@ interface Props {
   onHide?: () => void;
   onRestore?: () => void;
   compact?: boolean;
+  /** High-relevance flag (effective score above threshold) — shows a signal badge. */
+  highRelevance?: boolean;
+  /** Topic label to display on the card for quick scanning. */
+  topic?: string;
 }
 
 export const ItemCard = ({
   item, source, state, onOpen, onAction,
   selectable, selected, onToggleSelected,
   hidden, onHide, onRestore, compact,
+  highRelevance, topic,
 }: Props) => {
   if (compact) {
     return (
@@ -52,7 +57,9 @@ export const ItemCard = ({
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
           <RegionBadge region={item.region} />
           {source && <span className="font-medium text-foreground/60">{source.name}</span>}
-          <span className="mr-auto">{formatHeRelative(item.published_at)}</span>
+          <span className="mr-auto" title={item.published_at ? formatHeDateTime(item.published_at) : "ללא תאריך"}>
+            {formatHeSmartDate(item.published_at)}
+          </span>
           {onHide && (
             <button
               onClick={(e) => { e.stopPropagation(); onHide(); }}
@@ -63,6 +70,22 @@ export const ItemCard = ({
             </button>
           )}
         </div>
+
+        {/* Signal row: high relevance + topic */}
+        {(highRelevance || topic) && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {highRelevance && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/30">
+                <Zap className="h-3 w-3" /> רלוונטי מאוד
+              </span>
+            )}
+            {topic && topic !== "כללי" && (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-400/20">
+                {topic}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Title — 2 lines max */}
         <h3 className="text-sm font-bold text-primary leading-snug line-clamp-2">{item.title_he}</h3>

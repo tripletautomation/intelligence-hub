@@ -16,3 +16,13 @@ export const formatHeRelative = (iso?: string | null) => {
   const diffDay = Math.round(diffHr / 24);
   return heRel.format(diffDay, "day");
 };
+
+// Relative for recent items (< 7 days), absolute date for older ones — so a
+// card always communicates *when* something was published at a glance.
+export const formatHeSmartDate = (iso?: string | null) => {
+  if (!iso) return "ללא תאריך";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "ללא תאריך";
+  const days = Math.abs(Date.now() - t) / 86_400_000;
+  return days < 7 ? formatHeRelative(iso) : formatHeDate(iso);
+};

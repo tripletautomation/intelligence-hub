@@ -5,7 +5,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDrawer } from "@/components/ItemDrawer";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Search, LayoutList, Tag, ChevronDown, ChevronUp, Zap, Calendar, Clock, Archive, CheckSquare, X, Loader2, MessageSquare, Newspaper } from "lucide-react";
+import { RefreshCw, Search, Tag, ChevronDown, ChevronUp, Zap, Calendar, Clock, Archive, CheckSquare, X, Loader2, MessageSquare, Newspaper } from "lucide-react";
 import { NewsSearchPanel } from "@/components/NewsSearchPanel";
 import { WeeklyBriefPanel } from "@/components/WeeklyBriefPanel";
 import { ChatPanel } from "@/components/ChatPanel";
@@ -26,7 +26,6 @@ import type { Item, ActionType, TopicCategory } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Filter = "all" | "israel" | "global" | "events" | "research" | "unread" | "saved" | "liked" | "disliked";
-type GroupMode = "time" | "topic";
 
 const filters: { id: Filter; label: string }[] = [
   { id: "all", label: "הכל" },
@@ -91,7 +90,7 @@ const Dashboard = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [newsSearchOpen, setNewsSearchOpen] = useState(false);
   const [weeklyBriefOpen, setWeeklyBriefOpen] = useState(false);
-  const [groupMode, setGroupMode] = useState<GroupMode>("time");
+  const [topicFilter, setTopicFilter] = useState<string>("all");
   const [collapsedBuckets, setCollapsedBuckets] = useState<Set<string>>(new Set(["older"]));
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -139,6 +138,21 @@ const Dashboard = () => {
   const states = useMemo(() => deriveItemStates(actions), [actions]);
   const sourcesById = useMemo(() => new Map(sources.map((s) => [s.id, s])), [sources]);
 
+  // Precompute each item's topic bucket once — used for both filtering and the card label
+  const topicOf = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of items) map.set(item.id, getTopicBucket(item, topicCategories));
+    return map;
+  }, [items, topicCategories]);
+
+  // Topics that actually have items (for the filter chips)
+  const availableTopics = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of topicOf.values()) counts.set(t, (counts.get(t) ?? 0) + 1);
+    const ordered = [...topicCategories.map((c) => c.name), "כללי"].filter((n) => counts.has(n));
+    return ordered.map((name) => ({ name, count: counts.get(name) ?? 0 }));
+  }, [topicOf, topicCategories]);
+
   // Compute effective score per item (relevance + user tag boosts)
   const effectiveScore = useMemo(() => {
     const boost = prefs?.user_relevance_boost ?? {};
@@ -162,6 +176,7 @@ const Dashboard = () => {
       if (filter === "global" && it.region !== "global") return false;
       if (filter === "events" && it.item_type !== "event") return false;
       if (filter === "research" && it.item_type !== "research") return false;
+      if (topicFilter !== "all" && topicOf.get(it.id) !== topicFilter) return false;
       if (!showRead && filter !== "unread" && filter !== "liked" && filter !== "disliked" && st.read) return false;
       if (filter === "unread" && st.read) return false;
       if (filter === "saved" && !st.saved) return false;
@@ -173,7 +188,7 @@ const Dashboard = () => {
       }
       return true;
     });
-  }, [items, states, filter, search, prefs?.hidden_item_ids, showRead]);
+  }, [items, states, filter, search, prefs?.hidden_item_ids, showRead, topicFilter, topicOf]);
 
   // Sort filtered by effective score (descending)
   const sortedFiltered = useMemo(
@@ -191,23 +206,6 @@ const Dashboard = () => {
     }
     return map;
   }, [sortedFiltered]);
-
-  // Group by topic
-  const byTopic = useMemo(() => {
-    const map = new Map<string, Item[]>();
-    const orderedNames = [...topicCategories.map((c) => c.name), "כללי"];
-    for (const name of orderedNames) map.set(name, []);
-    for (const item of sortedFiltered) {
-      const bucket = getTopicBucket(item, topicCategories);
-      if (!map.has(bucket)) map.set(bucket, []);
-      map.get(bucket)!.push(item);
-    }
-    // Remove empty buckets
-    for (const [key, val] of map) {
-      if (val.length === 0) map.delete(key);
-    }
-    return map;
-  }, [sortedFiltered, topicCategories]);
 
   const kpi = useMemo(() => {
     const today = new Date();
@@ -277,6 +275,8 @@ const Dashboard = () => {
       onOpen={() => !selectMode && setOpenItem(item)}
       onAction={(a) => handleAction(item, a)}
       compact
+      highRelevance={(effectiveScore.get(item.id) ?? 0) >= 70}
+      topic={topicOf.get(item.id)}
       selectable={selectMode}
       selected={selectedIds.has(item.id)}
       onToggleSelected={() => toggleSelect(item.id)}
@@ -369,8 +369,8 @@ const Dashboard = () => {
       {/* KPI strip */}
       <KpiStrip newToday={kpi.newToday} unread={kpi.unread} upcoming={kpi.upcoming} activeSources={kpi.activeSources} />
 
-      {/* Filters + group toggle */}
-      <div className="flex flex-wrap gap-2 mb-6 items-center">
+      {/* Filters */}
+      <div className="flex flex-wrap gap-2 mb-3 items-center">
         {filters.map((f) => (
           <button
             key={f.id}
@@ -385,50 +385,55 @@ const Dashboard = () => {
             {f.label}
           </button>
         ))}
-        <div className="mr-auto flex items-center gap-2">
-          {/* Group mode toggle */}
-          <div className="flex items-center gap-1 bg-card border border-border rounded-full p-0.5">
-            <button
-              onClick={() => setGroupMode("time")}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
-                groupMode === "time"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <LayoutList className="h-3.5 w-3.5" /> לפי זמן
-            </button>
-            <button
-              onClick={() => setGroupMode("topic")}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
-                groupMode === "topic"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Tag className="h-3.5 w-3.5" /> לפי נושא
-            </button>
-          </div>
+        <button
+          onClick={() => setShowRead((v) => !v)}
+          className={cn(
+            "mr-auto px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors",
+            showRead
+              ? "bg-secondary text-foreground border-border"
+              : "bg-card text-muted-foreground border-border hover:text-foreground"
+          )}
+        >
+          {showRead ? "הסתר נקראים" : "הצג נקראים"}
+        </button>
+      </div>
+
+      {/* Topic chips — filter by subject while keeping the time-ordered feed */}
+      {availableTopics.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-6 items-center">
+          <Tag className="h-3.5 w-3.5 text-violet-400 shrink-0" />
           <button
-            onClick={() => setShowRead((v) => !v)}
+            onClick={() => setTopicFilter("all")}
             className={cn(
-              "px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors",
-              showRead
-                ? "bg-secondary text-foreground border-border"
+              "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+              topicFilter === "all"
+                ? "bg-violet-500/15 text-violet-300 border-violet-400/40"
                 : "bg-card text-muted-foreground border-border hover:text-foreground"
             )}
           >
-            {showRead ? "הסתר נקראים" : "הצג נקראים"}
+            כל הנושאים
           </button>
+          {availableTopics.map((t) => (
+            <button
+              key={t.name}
+              onClick={() => setTopicFilter(t.name)}
+              className={cn(
+                "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                topicFilter === t.name
+                  ? "bg-violet-500/15 text-violet-300 border-violet-400/40"
+                  : "bg-card text-muted-foreground border-border hover:text-foreground"
+              )}
+            >
+              {t.name} <span className="opacity-60 tabular-nums">{t.count}</span>
+            </button>
+          ))}
         </div>
-      </div>
+      )}
 
-      {/* Content */}
+      {/* Content — time-ordered feed (topic narrowing via chips above) */}
       {filtered.length === 0 ? (
         <div className="surface-card p-12 text-center text-muted-foreground">אין פריטים תואמים לסינון</div>
-      ) : groupMode === "time" ? (
+      ) : (
         <div className="space-y-5">
           {TIME_BUCKETS.map(({ id, label }) => {
             const bucketItems = byTime.get(id) ?? [];
@@ -444,24 +449,6 @@ const Dashboard = () => {
                 onToggle={() => toggleBucket(id)}
               >
                 {bucketItems.map(renderItem)}
-              </BucketSection>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="space-y-5">
-          {Array.from(byTopic.entries()).map(([name, topicItems]) => {
-            const isCollapsed = collapsedBuckets.has(name);
-            return (
-              <BucketSection
-                key={name}
-                label={name}
-                count={topicItems.length}
-                collapsed={isCollapsed}
-                variant="topic"
-                onToggle={() => toggleBucket(name)}
-              >
-                {topicItems.map(renderItem)}
               </BucketSection>
             );
           })}
