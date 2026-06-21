@@ -126,6 +126,7 @@ Deno.serve(async (req) => {
             item_ids: digestIds,
             language: type === "blog_en" ? "en" : "he",
             instructions: digestInstructions,
+            fast: true,
           });
         }
         if (result?.draft_id) {

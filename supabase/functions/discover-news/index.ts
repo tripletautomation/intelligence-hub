@@ -55,14 +55,16 @@ async function tavilySearch(query: string, apiKey: string, maxResults = 12, days
 
 // Post-filter by days cutoff (Tavily's days param is not always reliable)
 function filterByDays(results: TavilyResult[], days: number): TavilyResult[] {
-  if (days >= 365) return results; // "all time" — keep everything, dated or not
+  if (days >= 365) return results; // "all time" — keep everything
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   return results.filter((r) => {
-    // When a specific time window is requested, drop items we can't date —
-    // showing undated/stale content is exactly what breaks the time filter.
-    if (!r.published_date) return false;
+    // Tavily frequently omits published_date. Keep undated results — filtering
+    // them all out empties most searches. Only drop results we can date AND
+    // that are provably older than the window. The downstream feed handles
+    // missing dates (add-news-to-feed falls back to ingestion time).
+    if (!r.published_date) return true;
     const t = new Date(r.published_date).getTime();
-    return !isNaN(t) && t >= cutoff;
+    return isNaN(t) || t >= cutoff;
   });
 }
 

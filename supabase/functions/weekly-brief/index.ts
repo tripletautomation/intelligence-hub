@@ -250,50 +250,49 @@ Deno.serve(async (req) => {
       itemIds.push(id);
     }
 
-    // 4. Generate blog posts (HE + EN) via generate-blog-post
+    // 4. Generate the Hebrew blog draft + social posts IN THE BACKGROUND.
+    // Full long-form generation chained through nested function calls exceeds
+    // the request time limit (we saw 504s). So we return the news items now and
+    // let EdgeRuntime.waitUntil keep the function alive to finish the draft,
+    // which then appears on the Drafts page. An English version is one click
+    // away on the draft ("צור גרסה").
     const baseUrl = SUPABASE_URL.replace("/rest/v1", "");
     const funcUrl = `${baseUrl}/functions/v1`;
 
-    const [blogHeRes, blogEnRes] = await Promise.all([
-      fetch(`${funcUrl}/generate-blog-post`, {
-        method: "POST",
-        headers: { Authorization: authHeader, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          item_ids: itemIds,
-          language: "he",
-          instructions: "זהו בריף שבועי — צור מאמר שמחבר את כל הידיעות לנרטיב אחד קוהרנטי עם הזווית המקצועית של עופר",
-        }),
-      }),
-      fetch(`${funcUrl}/generate-blog-post`, {
-        method: "POST",
-        headers: { Authorization: authHeader, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          item_ids: itemIds,
-          language: "en",
-          instructions: "Weekly brief — create a cohesive article connecting all items into one narrative with Ofer's professional angle",
-        }),
-      }),
-    ]);
+    const generateDraftsInBackground = async () => {
+      try {
+        const blogHeRes = await fetch(`${funcUrl}/generate-blog-post`, {
+          method: "POST",
+          headers: { Authorization: authHeader, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            item_ids: itemIds,
+            language: "he",
+            fast: true,
+            instructions: "זהו בריף שבועי — צור מאמר שמחבר את כל הידיעות לנרטיב אחד קוהרנטי עם הזווית המקצועית של עופר",
+          }),
+        });
+        const blogHeData = await blogHeRes.json().catch(() => ({}));
+        const blogHeDraftId = blogHeData?.draft_id as string | undefined;
+        if (blogHeDraftId) {
+          await fetch(`${funcUrl}/generate-social-posts`, {
+            method: "POST",
+            headers: { Authorization: authHeader, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              draft_id: blogHeDraftId,
+              instructions: "צור פוסט LinkedIn בעברית שמחבר את כל הנושאים השבועיים לנרטיב אחד עם קריאה לדיון",
+            }),
+          });
+        }
+      } catch (e) {
+        console.error("weekly-brief background generation error", e);
+      }
+    };
 
-    const blogHeData = await blogHeRes.json().catch(() => ({}));
-    const blogEnData = await blogEnRes.json().catch(() => ({}));
-
-    // 5. Generate Hebrew social post connecting all items
-    const blogHeDraftId = blogHeData?.draft_id as string | undefined;
-    let socialPostId: string | null = null;
-
-    if (blogHeDraftId) {
-      const socialRes = await fetch(`${funcUrl}/generate-social-posts`, {
-        method: "POST",
-        headers: { Authorization: authHeader, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          draft_id: blogHeDraftId,
-          instructions: "צור פוסט LinkedIn בעברית שמחבר את כל הנושאים השבועיים לנרטיב אחד עם קריאה לדיון",
-        }),
-      });
-      const socialData = await socialRes.json().catch(() => ({}));
-      socialPostId = socialData?.id ?? blogHeDraftId;
-    }
+    const bgTask = generateDraftsInBackground();
+    try {
+      (globalThis as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } })
+        .EdgeRuntime?.waitUntil(bgTask);
+    } catch (_) { /* not on Edge runtime — ignore */ }
 
     return json({
       items_found: topItems.length,
@@ -303,11 +302,9 @@ Deno.serve(async (req) => {
         url: it.url,
         why_it_matters: it.why_it_matters,
       })),
-      drafts: {
-        blog_he_id: blogHeData?.draft_id ?? null,
-        blog_en_id: blogEnData?.draft_id ?? null,
-      },
-      social_post_draft_id: socialPostId,
+      drafts: { blog_he_id: null, blog_en_id: null },
+      social_post_draft_id: null,
+      drafts_pending: true,
     });
   } catch (e) {
     console.error("weekly-brief error", e);

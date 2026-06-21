@@ -41,11 +41,16 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (itemErr || !item) return json({ error: "item not found" }, 404);
 
-    // Load AI config — use default model for summarization
+    // Load AI config for the provider, but use the LIGHT/fast model tier —
+    // this is a quick summary, not long-form writing, so latency matters more
+    // than depth (the heavy default model made it slow).
     const { data: aiConfig } = await admin
       .from("ai_config").select("provider,model_id").eq("id", "default").maybeSingle();
-    const provider: string = aiConfig?.provider ?? "openai";
-    const modelId: string = aiConfig?.model_id ?? "gpt-4o-mini";
+    const provider: string = aiConfig?.provider ?? "anthropic";
+    const modelId: string =
+      provider === "anthropic" ? "claude-haiku-4-5-20251001" :
+      provider === "openai" ? "gpt-4o-mini" :
+      "google/gemini-2.5-pro";
 
     const apiKey = await getApiKey(admin,
       provider === "anthropic" ? "ANTHROPIC_API_KEY" :

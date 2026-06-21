@@ -19,6 +19,7 @@ interface BriefResult {
   items: BriefItem[];
   drafts: { blog_he_id: string | null; blog_en_id: string | null };
   social_post_draft_id: string | null;
+  drafts_pending?: boolean;
 }
 
 interface Props {
@@ -43,7 +44,7 @@ export function WeeklyBriefPanel({ open, onOpenChange }: Props) {
       if (error) throw new Error(error.message);
       setResult(data as BriefResult);
       setPhase("done");
-      toast.success(`נמצאו ${(data as BriefResult).items_found} ידיעות — נוצרו הטיוטות`);
+      toast.success(`נמצאו ${(data as BriefResult).items_found} ידיעות — הטיוטה נוצרת ברקע`);
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "שגיאה לא ידועה");
       setPhase("error");
@@ -138,7 +139,19 @@ export function WeeklyBriefPanel({ open, onOpenChange }: Props) {
 
               {/* Draft links */}
               <div className="space-y-2">
-                <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">טיוטות שנוצרו</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">טיוטות</h3>
+                {result.drafts_pending && !result.drafts.blog_he_id && (
+                  <button
+                    onClick={() => { nav(`/drafts`); handleOpenChange(false); }}
+                    className={cn(
+                      "w-full flex items-center justify-between gap-2 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2.5",
+                      "text-sm font-medium text-accent hover:bg-accent/10 transition-colors"
+                    )}
+                  >
+                    <span>הטיוטה (מאמר + פוסט) נוצרת ברקע — תופיע בעמוד המאמרים תוך דקה</span>
+                    <ArrowRight className="h-4 w-4 shrink-0" />
+                  </button>
+                )}
                 <div className="space-y-2">
                   {result.drafts.blog_he_id && (
                     <button

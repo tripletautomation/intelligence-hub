@@ -282,6 +282,10 @@ Deno.serve(async (req) => {
       ? body.source_notes : {};
     const webContext: string | null = typeof body?.web_context === "string" && body.web_context.trim()
       ? body.web_context.trim() : null;
+    // fast mode: prefer the lighter default model (Sonnet) over the Opus article
+    // model. Used by batch/chained callers (e.g. weekly-brief) to stay within
+    // the function timeout when generating several articles in one request.
+    const fast: boolean = body?.fast === true;
 
     if (itemIds.length > 10) return json({ error: "Maximum 10 source items" }, 400);
     if (itemIds.length < 1 && !webContext && !instructions) return json({ error: "At least one source required" }, 400);
@@ -300,7 +304,9 @@ Deno.serve(async (req) => {
       admin.from("prompt_templates").select("system_prompt").eq("id", `article_${contentType}`).maybeSingle(),
     ]);
 
-    const aiConfig = articleConfigRes.data ?? defaultConfigRes.data;
+    const aiConfig = fast
+      ? (defaultConfigRes.data ?? articleConfigRes.data)
+      : (articleConfigRes.data ?? defaultConfigRes.data);
     const provider: string = aiConfig?.provider ?? "anthropic";
     const modelId: string = aiConfig?.model_id ?? "claude-sonnet-4-6";
     const writingStylePrompt: string = writingStyleRes.data?.prompt_text?.trim() ?? "";
