@@ -19,9 +19,10 @@ import {
 import {
   ArrowRight, Loader2, Save, Trash2, Mail, Copy, Check,
   Wand2, Maximize2, Minimize2, RefreshCw, Sparkles,
-  Globe, Plus, X, Linkedin, Image,
+  Globe, Plus, X, Linkedin, Image, Instagram, Facebook, CalendarClock,
   Share2, ChevronDown, ChevronUp, Lightbulb, ExternalLink, Eye, Pencil, Send,
 } from "lucide-react";
+import { SchedulePostsDialog, type SchedulableItem } from "@/components/SchedulePostsDialog";
 import { toast } from "sonner";
 import { buildEmailBodyHtml } from "@/lib/articleHtml";
 import { cn } from "@/lib/utils";
@@ -55,13 +56,13 @@ type UnifiedSource =
   | { kind: "db"; id: string; title: string; url: string | null; note: string }
   | { kind: "web"; title: string; snippet: string; url: string; relevance: number; note: string };
 
-interface SocialPosts { linkedin_en: string; linkedin_he: string; image_prompt: string; }
+interface SocialPosts { linkedin_en: string; linkedin_he: string; instagram: string; facebook: string; image_prompt: string; }
 
 type AiAction = "regenerate" | "expand" | "condense" | "rephrase";
 type Tone = "formal" | "analytical" | "concise";
 type MainTab = "editor" | "social" | "images";
 type ImageType = "hero" | "square" | "newsletter" | "infographic";
-type Platform = "linkedin_en" | "linkedin_he" | "image_prompt";
+type Platform = "linkedin_en" | "linkedin_he" | "instagram" | "facebook" | "image_prompt";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -81,6 +82,8 @@ const TONES: { id: Tone; label: string }[] = [
 const PLATFORMS: { id: Platform; label: string; icon: React.ReactNode; idealMin: number | null; idealMax: number | null; hardMax: number | null; color: string; isPrompt?: boolean }[] = [
   { id: "linkedin_en", label: "LinkedIn — English", icon: <Linkedin className="h-4 w-4" />, idealMin: 1300, idealMax: 1800, hardMax: 3000, color: "text-blue-600" },
   { id: "linkedin_he", label: "LinkedIn — עברית",   icon: <Linkedin className="h-4 w-4" />, idealMin: 1300, idealMax: 1800, hardMax: 3000, color: "text-blue-700" },
+  { id: "instagram",   label: "Instagram — עברית", icon: <Instagram className="h-4 w-4" />, idealMin: 600, idealMax: 1200, hardMax: 2200, color: "text-pink-600" },
+  { id: "facebook",    label: "Facebook — עברית",  icon: <Facebook className="h-4 w-4" />, idealMin: 400, idealMax: 900, hardMax: 2000, color: "text-blue-800" },
   { id: "image_prompt", label: "Image Prompt", icon: <Image className="h-4 w-4" />, idealMin: null, idealMax: null, hardMax: null, color: "text-purple-600", isPrompt: true },
 ];
 
@@ -147,6 +150,7 @@ const DraftDetail = () => {
   const [socialAiPlatform, setSocialAiPlatform] = useState<Platform | null>(null);
   const [socialAiInstruction, setSocialAiInstruction] = useState("");
   const [socialAiLoading, setSocialAiLoading] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
 
   // Image prompts
   const [imagePrompts, setImagePrompts] = useState<Partial<Record<ImageType, string>>>({});
@@ -972,10 +976,18 @@ const DraftDetail = () => {
               <h2 className="text-base font-semibold text-primary">פוסטים לרשתות חברתיות</h2>
               <p className="text-sm text-muted-foreground">AI ממיר את המאמר לפוסט ייעודי לכל פלטפורמה</p>
             </div>
-            <Button onClick={generateSocialPosts} disabled={socialLoading} className="gap-2">
-              {socialLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              {socialPosts ? "עדכן פוסטים" : "צור פוסטים"}
-            </Button>
+            <div className="flex items-center gap-2">
+              {socialPosts && (
+                <Button variant="outline" onClick={() => setScheduleOpen(true)} className="gap-2 border-accent/40 text-accent hover:bg-accent/10">
+                  <CalendarClock className="h-4 w-4" />
+                  תזמן לרשתות
+                </Button>
+              )}
+              <Button onClick={generateSocialPosts} disabled={socialLoading} className="gap-2">
+                {socialLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {socialPosts ? "עדכן פוסטים" : "צור פוסטים"}
+              </Button>
+            </div>
           </div>
 
           {form.instructions && (
@@ -995,7 +1007,7 @@ const DraftDetail = () => {
           {socialLoading && (
             <div className="surface-card p-12 text-center text-muted-foreground animate-pulse">
               <Loader2 className="h-8 w-8 mx-auto mb-3 animate-spin" />
-              <p>AI יוצר פוסטים ל-3 פלטפורמות...</p>
+              <p>AI יוצר פוסטים לכל הפלטפורמות...</p>
             </div>
           )}
 
@@ -1030,7 +1042,7 @@ const DraftDetail = () => {
                       value={content}
                       minRows={platform.isPrompt ? 5 : 8}
                       className={cn("text-sm", platform.isPrompt && "font-mono text-xs")}
-                      dir={platform.id === "linkedin_he" ? "rtl" : "ltr"}
+                      dir={platform.id === "linkedin_en" || platform.isPrompt ? "ltr" : "rtl"}
                       readOnly={platform.isPrompt}
                       onChange={(e) => setSocialPosts((p) => p ? { ...p, [platform.id]: e.target.value } : p)}
                     />
@@ -1144,6 +1156,23 @@ const DraftDetail = () => {
             );
           })}
         </div>
+      )}
+
+      {id && (
+        <SchedulePostsDialog
+          open={scheduleOpen}
+          onOpenChange={setScheduleOpen}
+          draftId={id}
+          items={[
+            ...(socialPosts ? ([
+              { platform: "linkedin_he", content: socialPosts.linkedin_he },
+              { platform: "linkedin_en", content: socialPosts.linkedin_en },
+              { platform: "instagram", content: socialPosts.instagram },
+              { platform: "facebook", content: socialPosts.facebook },
+            ] as SchedulableItem[]) : []),
+            ...(form.body?.trim() ? ([{ platform: "blog", content: form.body }] as SchedulableItem[]) : []),
+          ]}
+        />
       )}
     </AppLayout>
   );

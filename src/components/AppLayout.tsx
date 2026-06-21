@@ -28,6 +28,7 @@ const tabs = [
   { to: "/events", label: "אירועים" },
   { to: "/discover", label: "חיפוש אירועים" },
   { to: "/drafts", label: "מאמרים" },
+  { to: "/queue", label: "תור פרסום" },
   { to: "/archive", label: "ארכיון" },
 ];
 

@@ -15,6 +15,7 @@ import Preferences from "./pages/Preferences";
 import Admin from "./pages/Admin";
 import Drafts from "./pages/Drafts";
 import DraftDetail from "./pages/DraftDetail";
+import ContentQueue from "./pages/ContentQueue";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
             <Route path="/admin" element={<RequireAdmin><Admin /></RequireAdmin>} />
             <Route path="/drafts" element={<RequireAuth><Drafts /></RequireAuth>} />
             <Route path="/drafts/:id" element={<RequireAuth><DraftDetail /></RequireAuth>} />
+            <Route path="/queue" element={<RequireAuth><ContentQueue /></RequireAuth>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
