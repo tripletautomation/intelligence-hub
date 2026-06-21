@@ -7,10 +7,11 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   FileText, Sparkles, Loader2, Mail, Trash2, Pencil,
   CheckCircle2, Archive as ArchiveIcon, RotateCcw, User, ChevronDown,
-  Linkedin, Globe, Globe2, Send,
+  Linkedin, Globe, Globe2, Send, CheckSquare, X,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
   DropdownMenuSeparator, DropdownMenuLabel,
@@ -88,6 +89,12 @@ const Drafts = () => {
   const [contentFilter, setContentFilter] = useState<ContentType | "all">("all");
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [markingPublishedId, setMarkingPublishedId] = useState<string | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); };
 
   const { data: rows = [], isLoading } = useQuery({
     enabled: !!user,
@@ -166,6 +173,20 @@ const Drafts = () => {
     },
     onSuccess: () => {
       toast.success("המאמר נמחק");
+      qc.invalidateQueries({ queryKey: ["article_drafts"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const bulkRemove = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await (supabase as any)
+        .from("article_drafts").delete().in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: (_d, ids) => {
+      toast.success(`${ids.length} מאמרים נמחקו`);
+      exitSelectMode();
       qc.invalidateQueries({ queryKey: ["article_drafts"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -280,8 +301,8 @@ const Drafts = () => {
         ))}
       </div>
 
-      {/* Content type filter */}
-      <div className="flex flex-wrap gap-2 mb-4">
+      {/* Content type filter + select toggle */}
+      <div className="flex flex-wrap gap-2 mb-4 items-center">
         {([["all", "הכל"], ["linkedin", "פוסט"], ["blog_he", "מאמר עברית"], ["blog_en", "מאמר אנגלית"]] as [string, string][]).map(([id, label]) => (
           <button
             key={id}
@@ -296,6 +317,27 @@ const Drafts = () => {
             {label}
           </button>
         ))}
+        {filtered.length > 0 && (
+          <div className="mr-auto flex items-center gap-2">
+            {selectMode && (
+              <button
+                onClick={() => setSelectedIds(new Set(filtered.map((d) => d.id)))}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                בחר הכל
+              </button>
+            )}
+            <Button
+              size="sm"
+              variant={selectMode ? "secondary" : "outline"}
+              onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
+              className="gap-1.5 h-7 text-xs"
+            >
+              <CheckSquare className="h-3.5 w-3.5" />
+              {selectMode ? "בטל בחירה" : "בחר"}
+            </Button>
+          </div>
+        )}
       </div>
 
       {isLoading ? (
@@ -315,9 +357,20 @@ const Drafts = () => {
               summary: d.intro ?? undefined,
             });
             return (
-              <Card key={d.id} className="p-5 flex flex-col gap-3 border-border hover:shadow-md transition-shadow">
+              <Card key={d.id} className={cn(
+                "p-5 flex flex-col gap-3 border-border hover:shadow-md transition-shadow",
+                selectMode && selectedIds.has(d.id) && "ring-2 ring-accent border-accent",
+              )}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
+                    {selectMode && (
+                      <Checkbox
+                        checked={selectedIds.has(d.id)}
+                        onCheckedChange={() => toggleSelect(d.id)}
+                        aria-label="בחר מאמר"
+                        className="ml-1"
+                      />
+                    )}
                     <span className="flex items-center gap-1 uppercase tracking-wider">
                       <FileText className="h-3.5 w-3.5" />
                       {d.created_label}
@@ -459,6 +512,50 @@ const Drafts = () => {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {/* Bulk action bar */}
+      {selectMode && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-sm px-4 py-3">
+          <div className="max-w-5xl mx-auto flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-medium text-foreground">
+              {selectedIds.size > 0 ? `${selectedIds.size} מאמרים נבחרו` : "בחר מאמרים"}
+            </span>
+            <div className="w-px h-5 bg-border hidden sm:block" />
+            <Button
+              size="sm" variant="ghost"
+              disabled={selectedIds.size === 0}
+              onClick={() => {
+                const ids = [...selectedIds];
+                ids.forEach((id) => updateStatus.mutate({ id, status: "archived" }));
+                exitSelectMode();
+              }}
+              className="gap-1.5"
+            >
+              <ArchiveIcon className="h-4 w-4" /> ארכב נבחרים
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button size="sm" variant="destructive" disabled={selectedIds.size === 0} className="gap-1.5">
+                  <Trash2 className="h-4 w-4" /> מחק נבחרים
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>למחוק {selectedIds.size} מאמרים?</AlertDialogTitle>
+                  <AlertDialogDescription>הפעולה אינה הפיכה.</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>ביטול</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => bulkRemove.mutate([...selectedIds])}>מחק</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            <Button size="sm" variant="ghost" onClick={exitSelectMode} className="mr-auto text-muted-foreground">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       )}
     </AppLayout>
