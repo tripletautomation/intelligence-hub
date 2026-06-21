@@ -1,14 +1,26 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Loader2, Plus, CheckCircle2, ExternalLink, Clock, CheckSquare } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuLabel, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Search, Loader2, Plus, CheckCircle2, ExternalLink, Clock, CheckSquare, Sparkles, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
+type GenerateType = "linkedin" | "blog_he" | "blog_en";
+const GENERATE_OPTIONS: { id: GenerateType; label: string }[] = [
+  { id: "linkedin", label: "פוסט LinkedIn" },
+  { id: "blog_he", label: "מאמר בלוג — עברית" },
+  { id: "blog_en", label: "מאמר בלוג — English" },
+];
 
 interface DiscoveredNewsItem {
   title_he: string;
@@ -53,6 +65,8 @@ interface Props {
 
 export const NewsSearchPanel = ({ open, onOpenChange }: Props) => {
   const qc = useQueryClient();
+  const nav = useNavigate();
+  const [creating, setCreating] = useState<GenerateType | null>(null);
   const [query, setQuery] = useState("");
   const [region, setRegion] = useState<"any" | "israel" | "global">("any");
   const [days, setDays] = useState<DaysFilter>("30");
@@ -89,6 +103,49 @@ export const NewsSearchPanel = ({ open, onOpenChange }: Props) => {
     setSelectedUrls(new Set());
     setAddingBulk(false);
     toast.success(`נוספו ${added} ידיעות לדשבורד`);
+  };
+
+  const createFromSelected = async (type: GenerateType) => {
+    const chosen = results.filter((r) => selectedUrls.has(r.url));
+    if (!chosen.length) { toast.error("בחר ידיעות קודם"); return; }
+    setCreating(type);
+    try {
+      const webContext = chosen
+        .map((r) => [
+          `כותרת: ${r.title_he}`,
+          r.summary_he ? `סיכום: ${r.summary_he}` : "",
+          r.why_it_matters ? `למה זה חשוב: ${r.why_it_matters}` : "",
+          r.source_name ? `מקור: ${r.source_name}` : "",
+          `קישור: ${r.url}`,
+        ].filter(Boolean).join("\n"))
+        .join("\n\n---\n\n");
+
+      let draftId: string | null = null;
+      if (type === "linkedin") {
+        const { data, error } = await supabase.functions.invoke("generate-article", {
+          body: { web_context: webContext, target_words: "medium", fast: true },
+        });
+        if (error) throw error;
+        if ((data as any)?.error) throw new Error((data as any).error);
+        draftId = (data as any)?.draft_id;
+      } else {
+        const { data, error } = await supabase.functions.invoke("generate-blog-post", {
+          body: { web_context: webContext, language: type === "blog_en" ? "en" : "he", fast: true },
+        });
+        if (error) throw error;
+        if ((data as any)?.error) throw new Error((data as any).error);
+        draftId = (data as any)?.draft_id;
+      }
+      if (!draftId) throw new Error("לא התקבל מזהה טיוטה");
+      qc.invalidateQueries({ queryKey: ["article_drafts"] });
+      toast.success("הטיוטה נוצרה מהידיעות הנבחרות!");
+      handleClose();
+      nav(`/drafts/${draftId}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "שגיאה ביצירת טיוטה");
+    } finally {
+      setCreating(null);
+    }
   };
 
   const handleSearch = async () => {
@@ -230,15 +287,41 @@ export const NewsSearchPanel = ({ open, onOpenChange }: Props) => {
                     ? "בטל הכל" : "בחר הכל"}
                 </Button>
                 {selectedUrls.size > 0 && (
-                  <Button
-                    size="sm"
-                    onClick={addBulkToFeed}
-                    disabled={addingBulk}
-                    className="h-7 gap-1.5 text-xs"
-                  >
-                    {addingBulk ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                    הוסף נבחרים ({selectedUrls.size})
-                  </Button>
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={addBulkToFeed}
+                      disabled={addingBulk || !!creating}
+                      className="h-7 gap-1.5 text-xs"
+                    >
+                      {addingBulk ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                      הוסף ({selectedUrls.size})
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" disabled={!!creating || addingBulk} className="h-7 gap-1.5 text-xs">
+                          {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                          צור תוכן <ChevronDown className="h-3 w-3" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">
+                          מ-{selectedUrls.size} ידיעות נבחרות
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        {GENERATE_OPTIONS.map((opt) => (
+                          <DropdownMenuItem
+                            key={opt.id}
+                            className="gap-2 cursor-pointer text-sm"
+                            onClick={() => createFromSelected(opt.id)}
+                          >
+                            <Sparkles className="h-3.5 w-3.5" /> {opt.label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </>
                 )}
               </div>
               {results.map((item) => (

@@ -144,7 +144,7 @@ export const ChatPanel = ({ onClose }: Props) => {
 
       if (action.content_type === "linkedin") {
         const { data, error } = await supabase.functions.invoke("generate-article", {
-          body: { item_ids: itemIds, web_context: webCtx, instructions, target_words: "medium" },
+          body: { item_ids: itemIds, web_context: webCtx, instructions, target_words: "medium", fast: true },
         });
         if (error) {
           const detail = await (error as any).context?.text?.() ?? error.message;
@@ -154,7 +154,7 @@ export const ChatPanel = ({ onClose }: Props) => {
         draftId = (data as any)?.draft_id;
       } else {
         const { data, error } = await supabase.functions.invoke("generate-blog-post", {
-          body: { item_ids: itemIds, language: action.content_type === "blog_en" ? "en" : "he", web_context: webCtx, instructions },
+          body: { item_ids: itemIds, language: action.content_type === "blog_en" ? "en" : "he", web_context: webCtx, instructions, fast: true },
         });
         if (error) {
           const detail = await (error as any).context?.text?.() ?? error.message;

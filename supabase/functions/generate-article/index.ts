@@ -228,6 +228,10 @@ Deno.serve(async (req) => {
       body?.target_words === "long" ? "long" : "medium";
     const webContext: string | null = typeof body?.web_context === "string" && body.web_context.trim()
       ? body.web_context.trim() : null;
+    // fast mode: prefer the lighter default (Sonnet) over the Opus article model.
+    // Used by quick-create entry points (chat, news search) where a fast first
+    // draft matters more than maximum polish — the user refines in the editor.
+    const fast: boolean = body?.fast === true;
 
     if (itemIds.length > 10) {
       return json({ error: "ניתן לבחור עד 10 פריטים בו-זמנית" }, 400);
@@ -245,7 +249,9 @@ Deno.serve(async (req) => {
       admin.from("ai_config").select("prompt_text").eq("id", "writing_style").maybeSingle(),
       admin.from("prompt_templates").select("system_prompt").eq("id", "article_linkedin").maybeSingle(),
     ]);
-    const aiConfig = articleConfigRes.data ?? defaultConfigRes.data;
+    const aiConfig = fast
+      ? (defaultConfigRes.data ?? articleConfigRes.data)
+      : (articleConfigRes.data ?? defaultConfigRes.data);
     const provider: string = aiConfig?.provider ?? "anthropic";
     const modelId: string = aiConfig?.model_id ?? "claude-sonnet-4-6";
     const writingStylePrompt: string = writingStyleRes.data?.prompt_text?.trim() ?? "";
