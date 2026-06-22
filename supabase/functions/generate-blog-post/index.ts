@@ -75,7 +75,7 @@ DO:
 - Use specific numbers and data points from the sources
 - Short punchy sentences for key points: "Three servers. One million dollars. Zero redundancy."
 - Paragraphs of 3-5 sentences with clear white space between them
-- Length: 1800-2500 words, 3-5 H2 sections
+- Length: 1000-1400 words, 3-4 H2 sections
 
 DO NOT:
 - Use em dashes to connect sentences — use a comma, colon, or new sentence instead
@@ -146,7 +146,7 @@ Return ONLY via the emit_blog_draft tool. No free text.`;
 - מספרים ונתונים ספציפיים מהמקורות
 - משפטים קצרים לנקודות מפתח: "שלושה שרתים. מיליון שקל. אפס redundancy."
 - פסקאות של 3-5 משפטים עם רווח ביניהן
-- אורך: 1500-2500 מילים, 3-5 כותרות H2
+- אורך: 1000-1400 מילים, 3-4 כותרות H2
 
 לא לעשות — רשימה שחורה:
 - em dash לחיבור משפטים — השתמש בפסיק, נקודותיים, או משפט חדש
@@ -211,7 +211,7 @@ async function callAnthropic(modelId: string, userPrompt: string, apiKey: string
     },
     body: JSON.stringify({
       model: modelId,
-      max_tokens: 8000,
+      max_tokens: 4000,
       system: systemPrompt,
       tools: [{
         name: "emit_blog_draft",
@@ -304,9 +304,11 @@ Deno.serve(async (req) => {
       admin.from("prompt_templates").select("system_prompt").eq("id", `article_${contentType}`).maybeSingle(),
     ]);
 
-    const aiConfig = fast
-      ? (defaultConfigRes.data ?? articleConfigRes.data)
-      : (articleConfigRes.data ?? defaultConfigRes.data);
+    // Long-form blog generation on the Opus "article" model reliably exceeds the
+    // platform's function time limit (~150s) and 504s. Blogs therefore always use
+    // the lighter/faster default model (Sonnet) — excellent quality, no timeout.
+    // (The Opus "article" tier stays for the shorter LinkedIn posts.)
+    const aiConfig = defaultConfigRes.data ?? articleConfigRes.data;
     const provider: string = aiConfig?.provider ?? "anthropic";
     const modelId: string = aiConfig?.model_id ?? "claude-sonnet-4-6";
     const writingStylePrompt: string = writingStyleRes.data?.prompt_text?.trim() ?? "";
