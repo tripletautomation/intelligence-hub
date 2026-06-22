@@ -241,7 +241,15 @@ Deno.serve(async (req) => {
 
     if (rawResults.length === 0) return json({ items: [] });
 
-    const items = await extractNews(query, region, rawResults, OPENAI_API_KEY);
+    // Retry the AI extraction once on a transient failure (rate limit / hiccup)
+    let items;
+    try {
+      items = await extractNews(query, region, rawResults, OPENAI_API_KEY);
+    } catch (e) {
+      console.warn("extractNews failed, retrying once:", e instanceof Error ? e.message : e);
+      await new Promise((r) => setTimeout(r, 1500));
+      items = await extractNews(query, region, rawResults, OPENAI_API_KEY);
+    }
     return json({ items });
 
   } catch (e) {

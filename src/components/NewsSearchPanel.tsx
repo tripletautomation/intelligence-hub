@@ -157,9 +157,16 @@ export const NewsSearchPanel = ({ open, onOpenChange }: Props) => {
       const { data, error } = await supabase.functions.invoke("discover-news", {
         body: { query: query.trim(), region, days: Number(days) },
       });
-      if (error) throw error;
+      if (error) {
+        // Surface the function's real error instead of the generic
+        // "Edge Function returned a non-2xx status code".
+        const detail = await (error as any).context?.json?.().then((b: any) => b?.error).catch(() => null);
+        throw new Error(detail || error.message);
+      }
       if ((data as any)?.error) throw new Error((data as any).error);
-      setResults((data as any)?.items ?? []);
+      const items = (data as any)?.items ?? [];
+      setResults(items);
+      if (items.length === 0) toast.info("לא נמצאו ידיעות בטווח הזמן שנבחר. נסי טווח רחב יותר או נושא אחר.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "שגיאה בחיפוש");
     } finally {
